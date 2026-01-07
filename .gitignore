@@ -3,6 +3,8 @@
 
 ### Custom Ignore ###
 deploy.sh
+AlurBisnis.md
+ListEndpoints.md
 
 ### Flask ###
 instance/*
