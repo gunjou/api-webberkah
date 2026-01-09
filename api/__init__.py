@@ -12,6 +12,7 @@ from api.shared.exceptions import AppError
 load_dotenv()
 
 from api.auth import auth_ns
+from api.master import master_ns
 
 app = Flask(__name__)
 CORS(app)
@@ -59,6 +60,7 @@ api = Api(
 # REGISTER NAMESPACES
 # ==============================
 api.add_namespace(auth_ns, path="/auth")
+api.add_namespace(master_ns, path="/master")
 
 
 # ==============================
@@ -73,12 +75,11 @@ def handle_app_error_restx(error: AppError):
         "errors": error.errors
     }, error.status_code
 
-
-@api.errorhandler(Exception)
-def handle_unexpected_error_restx(error):
-    # log error kalau mau
-    return {
-        "success": False,
-        "message": "Internal server error",
-        "code": "INTERNAL_ERROR"
-    }, 500
+# @api.errorhandler(Exception)
+# def handle_unexpected_error_restx(error):
+#     # log error kalau mau
+#     return {
+#         "success": False,
+#         "message": "Internal server error",
+#         "code": "INTERNAL_ERROR"
+#     }, 500
