@@ -13,6 +13,7 @@ load_dotenv()
 
 from api.auth import auth_ns
 from api.master import master_ns
+from api.pegawai import pegawai_ns
 
 app = Flask(__name__)
 CORS(app)
@@ -61,6 +62,7 @@ api = Api(
 # ==============================
 api.add_namespace(auth_ns, path="/auth")
 api.add_namespace(master_ns, path="/master")
+api.add_namespace(pegawai_ns, path="/pegawai")
 
 
 # ==============================

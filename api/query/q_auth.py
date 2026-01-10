@@ -39,8 +39,10 @@ def update_admin_last_login(id_admin: int):
 def get_pegawai_by_username(username: str):
     sql = text("""
         SELECT
-            ap.id_auth_pegawai, ap.id_pegawai, ap.username, ap.password_hash, ap.img_path, ap.status
+            ap.id_auth_pegawai, ap.id_pegawai, ap.username, ap.password_hash, ap.img_path,
+            ap.status AS auth_status, p.status AS pegawai_status
         FROM auth_pegawai ap
+        JOIN pegawai p ON ap.id_pegawai = p.id_pegawai
         WHERE ap.username = :username
           AND ap.status = 1
         LIMIT 1

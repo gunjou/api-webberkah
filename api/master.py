@@ -85,6 +85,7 @@ class StatusPegawaiListResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self):
+        """Akses: (admin, pegawai), Get list status pegawai"""
         data = get_status_pegawai_list()
         return success(data=data, message="List status pegawai")
 
@@ -92,6 +93,7 @@ class StatusPegawaiListResource(Resource):
     @master_ns.expect(status_pegawai_model, validate=True)
     @measure_execution_time
     def post(self):
+        """Akses: (admin), Add status pegawai baru"""
         body = request.get_json(silent=True) or {}
         nama_status = body.get("nama_status")
 
@@ -108,6 +110,7 @@ class StatusPegawaiDetailResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self, id_status_pegawai):
+        """Akses: (admin, pegawai), Get status pegawai by id"""
         data = get_status_pegawai_by_id(id_status_pegawai)
         if not data:
             raise NotFoundError("Status pegawai tidak ditemukan")
@@ -118,6 +121,7 @@ class StatusPegawaiDetailResource(Resource):
     @master_ns.expect(status_pegawai_model, validate=True)
     @measure_execution_time
     def put(self, id_status_pegawai):
+        """Akses: (admin), Edit status pegawai by id"""
         body = request.get_json(silent=True) or {}
         nama_status = body.get("nama_status")
 
@@ -133,6 +137,7 @@ class StatusPegawaiDetailResource(Resource):
     @role_required('admin')
     @measure_execution_time
     def delete(self, id_status_pegawai):
+        """Akses: (admin), Delete status pegawai by id"""
         deleted = delete_status_pegawai(id_status_pegawai)
         if deleted == 0:
             raise NotFoundError("Status pegawai tidak ditemukan")
@@ -150,6 +155,7 @@ class DepartemenListResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self):
+        """Akses: (admin, pegawai), Get list departemen"""
         data = get_departemen_list()
         return success(data=data, message="List departemen")
 
@@ -157,6 +163,7 @@ class DepartemenListResource(Resource):
     @master_ns.expect(departemen_model, validate=True)
     @measure_execution_time
     def post(self):
+        """Akses: (admin), Add departemen baru"""
         body = request.get_json(silent=True) or {}
         nama_departemen = body.get("nama_departemen")
 
@@ -173,6 +180,7 @@ class DepartemenDetailResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self, id_departemen):
+        """Akses: (admin, pegawai), Get departemen by id"""
         data = get_departemen_by_id(id_departemen)
         if not data:
             raise NotFoundError("Departemen tidak ditemukan")
@@ -183,6 +191,7 @@ class DepartemenDetailResource(Resource):
     @master_ns.expect(departemen_model, validate=True)
     @measure_execution_time
     def put(self, id_departemen):
+        """Akses: (admin), Edit departemen by id"""
         body = request.get_json(silent=True) or {}
         nama_departemen = body.get("nama_departemen")
 
@@ -198,6 +207,7 @@ class DepartemenDetailResource(Resource):
     @role_required("admin")
     @measure_execution_time
     def delete(self, id_departemen):
+        """Akses: (admin), Delete departemen by id"""
         deleted = delete_departemen(id_departemen)
         if deleted == 0:
             raise NotFoundError("Departemen tidak ditemukan")
@@ -215,6 +225,7 @@ class JabatanListResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self):
+        """Akses: (admin, pegawai), Get list jabatan"""
         data = get_jabatan_list()
         return success(data=data, message="List jabatan")
 
@@ -222,6 +233,7 @@ class JabatanListResource(Resource):
     @master_ns.expect(jabatan_model, validate=True)
     @measure_execution_time
     def post(self):
+        """Akses: (admin), Add jabatan baru"""
         body = request.get_json(silent=True) or {}
         nama_jabatan = body.get("nama_jabatan")
 
@@ -238,6 +250,7 @@ class JabatanDetailResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self, id_jabatan):
+        """Akses: (admin, pegawai), Get jabatan by id"""
         data = get_jabatan_by_id(id_jabatan)
         if not data:
             raise NotFoundError("Jabatan tidak ditemukan")
@@ -248,6 +261,7 @@ class JabatanDetailResource(Resource):
     @master_ns.expect(jabatan_model, validate=True)
     @measure_execution_time
     def put(self, id_jabatan):
+        """Akses: (admin), Edit jabatan by id"""
         body = request.get_json(silent=True) or {}
         nama_jabatan = body.get("nama_jabatan")
 
@@ -263,6 +277,7 @@ class JabatanDetailResource(Resource):
     @role_required("admin")
     @measure_execution_time
     def delete(self, id_jabatan):
+        """Akses: (admin), Delete jabatan by id"""
         deleted = delete_jabatan(id_jabatan)
         if deleted == 0:
             raise NotFoundError("Jabatan tidak ditemukan")
@@ -280,6 +295,7 @@ class LevelJabatanListResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self):
+        """Akses: (admin, pegawai), Get list level jabatan"""
         data = get_level_jabatan_list()
         return success(data=data, message="List level jabatan")
 
@@ -287,6 +303,7 @@ class LevelJabatanListResource(Resource):
     @master_ns.expect(level_jabatan_model, validate=True)
     @measure_execution_time
     def post(self):
+        """Akses: (admin), Add level jabatan baru"""
         body = request.get_json(silent=True) or {}
         nama_level = body.get("nama_level")
         urutan_level = body.get("urutan_level")
@@ -304,6 +321,7 @@ class LevelJabatanDetailResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self, id_level_jabatan):
+        """Akses: (admin, pegawai), Get level jabatan by id"""
         data = get_level_jabatan_by_id(id_level_jabatan)
         if not data:
             raise NotFoundError("Level jabatan tidak ditemukan")
@@ -314,6 +332,7 @@ class LevelJabatanDetailResource(Resource):
     @master_ns.expect(level_jabatan_model, validate=True)
     @measure_execution_time
     def put(self, id_level_jabatan):
+        """Akses: (admin), Edit level jabatan by id"""
         body = request.get_json(silent=True) or {}
         nama_level = body.get("nama_level")
         urutan_level = body.get("urutan_level")
@@ -330,6 +349,7 @@ class LevelJabatanDetailResource(Resource):
     @role_required("admin")
     @measure_execution_time
     def delete(self, id_level_jabatan):
+        """Akses: (admin), Delete leveljabatan by id"""
         deleted = delete_level_jabatan(id_level_jabatan)
         if deleted == 0:
             raise NotFoundError("Level jabatan tidak ditemukan")
@@ -347,6 +367,7 @@ class JamKerjaListResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self):
+        """Akses: (admin, pegawai), Get list jam kerja"""
         data = get_jam_kerja_list()
         return success(data=data, message="List jam kerja")
 
@@ -354,6 +375,7 @@ class JamKerjaListResource(Resource):
     @master_ns.expect(jam_kerja_model, validate=True)
     @measure_execution_time
     def post(self):
+        """Akses: (admin), Add jam kerja baru"""
         body = request.get_json(silent=True) or {}
         nama_shift = body.get("nama_shift")
         jam_per_hari = body.get("jam_per_hari")
@@ -371,6 +393,7 @@ class JamKerjaDetailResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self, id_jam_kerja):
+        """Akses: (admin, pegawai), Get jam kerja by id"""
         data = get_jam_kerja_by_id(id_jam_kerja)
         if not data:
             raise NotFoundError("Jam kerja tidak ditemukan")
@@ -381,6 +404,7 @@ class JamKerjaDetailResource(Resource):
     @master_ns.expect(jam_kerja_model, validate=True)
     @measure_execution_time
     def put(self, id_jam_kerja):
+        """Akses: (admin), Edit jam kerja by id"""
         body = request.get_json(silent=True) or {}
         nama_shift = body.get("nama_shift")
         jam_per_hari = body.get("jam_per_hari")
@@ -397,6 +421,7 @@ class JamKerjaDetailResource(Resource):
     @role_required("admin")
     @measure_execution_time
     def delete(self, id_jam_kerja):
+        """Akses: (admin), Delete jam kerja by id"""
         deleted = delete_jam_kerja(id_jam_kerja)
         if deleted == 0:
             raise NotFoundError("Jam kerja tidak ditemukan")
@@ -414,6 +439,7 @@ class LokasiAbsensiListResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self):
+        """Akses: (admin, pegawai), Get list lokasi absensi"""
         data = get_lokasi_absensi_list()
         return success(data=data, message="List lokasi absensi")
 
@@ -421,6 +447,7 @@ class LokasiAbsensiListResource(Resource):
     @master_ns.expect(lokasi_absensi_model, validate=True)
     @measure_execution_time
     def post(self):
+        """Akses: (admin), Add lokasi absensi baru"""
         body = request.get_json(silent=True) or {}
 
         nama_lokasi = body.get("nama_lokasi")
@@ -450,6 +477,7 @@ class LokasiAbsensiDetailResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self, id_lokasi):
+        """Akses: (admin, pegawai), Get lokasi absensi by id"""
         data = get_lokasi_absensi_by_id(id_lokasi)
         if not data:
             raise NotFoundError("Lokasi absensi tidak ditemukan")
@@ -460,6 +488,7 @@ class LokasiAbsensiDetailResource(Resource):
     @master_ns.expect(lokasi_absensi_model, validate=True)
     @measure_execution_time
     def put(self, id_lokasi):
+        """Akses: (admin), Edit lokasi absensi by id"""
         body = request.get_json(silent=True) or {}
 
         nama_lokasi = body.get("nama_lokasi")
@@ -488,6 +517,7 @@ class LokasiAbsensiDetailResource(Resource):
     @role_required("admin")
     @measure_execution_time
     def delete(self, id_lokasi):
+        """Akses: (admin), Delete lokasi absensi by id"""
         deleted = delete_lokasi_absensi(id_lokasi)
         if deleted == 0:
             raise NotFoundError("Lokasi absensi tidak ditemukan")
@@ -505,6 +535,7 @@ class JenisIzinListResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self):
+        """Akses: (admin, pegawai), Get list jenis izin"""
         data = get_jenis_izin_list()
         return success(data=data, message="List jenis izin")
 
@@ -512,6 +543,7 @@ class JenisIzinListResource(Resource):
     @master_ns.expect(jenis_izin_model, validate=True)
     @measure_execution_time
     def post(self):
+        """Akses: (admin), Add jenis izin baru"""
         body = request.get_json(silent=True) or {}
 
         nama_izin = body.get("nama_izin")
@@ -532,6 +564,7 @@ class JenisIzinDetailResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self, id_jenis_izin):
+        """Akses: (admin, pegawai), Get jenis izin by id"""
         data = get_jenis_izin_by_id(id_jenis_izin)
         if not data:
             raise NotFoundError("Jenis izin tidak ditemukan")
@@ -542,6 +575,7 @@ class JenisIzinDetailResource(Resource):
     @master_ns.expect(jenis_izin_model, validate=True)
     @measure_execution_time
     def put(self, id_jenis_izin):
+        """Akses: (admin), Edit jenis izin by id"""
         body = request.get_json(silent=True) or {}
 
         nama_izin = body.get("nama_izin")
@@ -561,6 +595,7 @@ class JenisIzinDetailResource(Resource):
     @role_required("admin")
     @measure_execution_time
     def delete(self, id_jenis_izin):
+        """Akses: (admin), Delete jenis izin by id"""
         deleted = delete_jenis_izin(id_jenis_izin)
         if deleted == 0:
             raise NotFoundError("Jenis izin tidak ditemukan")
@@ -578,6 +613,7 @@ class JenisLemburListResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self):
+        """Akses: (admin, pegawai), Get list jenis lembur"""
         data = get_jenis_lembur_list()
         return success(data=data, message="List jenis lembur")
 
@@ -585,6 +621,7 @@ class JenisLemburListResource(Resource):
     @master_ns.expect(jenis_lembur_model, validate=True)
     @measure_execution_time
     def post(self):
+        """Akses: (admin), Add jenis lembur baru"""
         body = request.get_json(silent=True) or {}
 
         nama_jenis = body.get("nama_jenis")
@@ -603,6 +640,7 @@ class JenisLemburDetailResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self, id_jenis_lembur):
+        """Akses: (admin, pegawai), Get jenis lembur by id"""
         data = get_jenis_lembur_by_id(id_jenis_lembur)
         if not data:
             raise NotFoundError("Jenis lembur tidak ditemukan")
@@ -613,6 +651,7 @@ class JenisLemburDetailResource(Resource):
     @master_ns.expect(jenis_lembur_model, validate=True)
     @measure_execution_time
     def put(self, id_jenis_lembur):
+        """Akses: (admin), Edit jenis lembur by id"""
         body = request.get_json(silent=True) or {}
 
         nama_jenis = body.get("nama_jenis")
@@ -630,6 +669,7 @@ class JenisLemburDetailResource(Resource):
     @role_required("admin")
     @measure_execution_time
     def delete(self, id_jenis_lembur):
+        """Akses: (admin), Delete jenis lembur by id"""
         deleted = delete_jenis_lembur(id_jenis_lembur)
         if deleted == 0:
             raise NotFoundError("Jenis lembur tidak ditemukan")
@@ -647,6 +687,7 @@ class LemburRuleListResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self):
+        """Akses: (admin, pegawai), Get list aturan lembur"""
         data = get_lembur_rule_list()
         return success(data=data, message="List rule lembur")
 
@@ -654,6 +695,7 @@ class LemburRuleListResource(Resource):
     @master_ns.expect(lembur_rule_model, validate=True)
     @measure_execution_time
     def post(self):
+        """Akses: (admin), Add aturan lembur baru"""
         body = request.get_json(silent=True) or {}
 
         required_fields = [
@@ -684,6 +726,7 @@ class LemburRuleDetailResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self, id_rule):
+        """Akses: (admin, pegawai), Get aturan lembur by id"""
         data = get_lembur_rule_by_id(id_rule)
         if not data:
             raise NotFoundError("Rule lembur tidak ditemukan")
@@ -694,6 +737,7 @@ class LemburRuleDetailResource(Resource):
     @master_ns.expect(lembur_rule_model, validate=True)
     @measure_execution_time
     def put(self, id_rule):
+        """Akses: (admin), Edit aturan lembur by id"""
         body = request.get_json(silent=True) or {}
 
         required_fields = [
@@ -724,6 +768,7 @@ class LemburRuleDetailResource(Resource):
     @role_required("admin")
     @measure_execution_time
     def delete(self, id_rule):
+        """Akses: (admin), Delete aturan lembur by id"""
         deleted = delete_lembur_rule(id_rule)
         if deleted == 0:
             raise NotFoundError("Rule lembur tidak ditemukan")
@@ -741,6 +786,7 @@ class HariLiburListResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self):
+        """Akses: (admin, pegawai), Get list hari libur"""
         data = get_hari_libur_list()
         return success(data=data, message="List hari libur")
 
@@ -748,6 +794,7 @@ class HariLiburListResource(Resource):
     @master_ns.expect(hari_libur_model, validate=True)
     @measure_execution_time
     def post(self):
+        """Akses: (admin), Add hari libur baru"""
         body = request.get_json(silent=True) or {}
 
         tanggal = body.get("tanggal")
@@ -774,6 +821,7 @@ class HariLiburDetailResource(Resource):
     @jwt_required()
     @measure_execution_time
     def get(self, id_libur):
+        """Akses: (admin, pegawai), Get hari libur by id"""
         data = get_hari_libur_by_id(id_libur)
         if not data:
             raise NotFoundError("Hari libur tidak ditemukan")
@@ -784,6 +832,7 @@ class HariLiburDetailResource(Resource):
     @master_ns.expect(hari_libur_model, validate=True)
     @measure_execution_time
     def put(self, id_libur):
+        """Akses: (admin), Edit hari libur by id"""
         body = request.get_json(silent=True) or {}
 
         tanggal = body.get("tanggal")
@@ -811,6 +860,7 @@ class HariLiburDetailResource(Resource):
     @role_required("admin")
     @measure_execution_time
     def delete(self, id_libur):
+        """Akses: (admin), Delete hari libur by id"""
         deleted = delete_hari_libur(id_libur)
         if deleted == 0:
             raise NotFoundError("Hari libur tidak ditemukan")

@@ -34,12 +34,11 @@ change_password_model = auth_ns.model("ChangePasswordRequest", {
 # ================================================
 @auth_ns.route("/admin/login")
 class AdminLoginResource(Resource):
-    """
-    Login Admin Webberkah
-    """
+    
     @auth_ns.expect(admin_login_model, validate=True)
     @measure_execution_time
     def post(self):
+        """Akses: (admin), Login Admin Webberkah"""
         body = request.get_json(silent=True) or {}
 
         username = body.get("username")
@@ -99,19 +98,16 @@ class AdminLoginResource(Resource):
 
 @auth_ns.route("/pegawai/login")
 class PegawaiLoginResource(Resource):
-    """
-    Login Pegawai Webberkah
-    """
 
     @auth_ns.expect(pegawai_login_model, validate=True)
     @measure_execution_time
     def post(self):
+        """Akses: (pegawai), Login Pegawai Webberkah"""
         body = request.get_json(silent=True) or {}
 
         username = body.get("username")
         password = body.get("password")
 
-        # validasi input
         if not username or not password:
             raise ValidationError(
                 message="Username dan password wajib diisi",
@@ -121,15 +117,17 @@ class PegawaiLoginResource(Resource):
                 }
             )
 
-        # ambil data pegawai
         pegawai = get_pegawai_by_username(username)
+
         if not pegawai:
-            raise AuthError("Username atau password salah")
+            raise AuthError("Username tidak terdaftar")
+
+        if pegawai["pegawai_status"] != 1:
+            raise AuthError("Pegawai tidak terdaftar atau sudah tidak aktif")
 
         if not check_password_hash(pegawai["password_hash"], password):
-            raise AuthError("Username atau password salah")
+            raise AuthError("Password yang diinputkan salah")
 
-        # generate token
         access_token = create_access_token(
             identity=str(pegawai["id_pegawai"]),
             additional_claims={
@@ -144,7 +142,6 @@ class PegawaiLoginResource(Resource):
             }
         )
 
-        # update last login
         update_pegawai_last_login(pegawai["id_auth_pegawai"])
 
         return success(
@@ -163,12 +160,11 @@ class PegawaiLoginResource(Resource):
         
 @auth_ns.route("/logout")
 class LogoutResource(Resource):
-    """
-    Logout user (admin / pegawai)
-    """
+
     @jwt_required()
     @measure_execution_time
     def post(self):
+        """Akses: (admin, pegawai), Logout user"""
         # JWT stateless → logout cukup di frontend
         user_id = get_jwt_identity()
         return success(
@@ -184,12 +180,11 @@ class LogoutResource(Resource):
 # ======================================
 @auth_ns.route("/me")
 class MeResource(Resource):
-    """
-    Get current logged in user
-    """
+
     @jwt_required()
     @measure_execution_time
     def get(self):
+        """Akses: (admin, pegawai), Ambil data user sedang login"""
         jwt_data = get_jwt()
         identity = get_jwt_identity()
 
@@ -209,12 +204,11 @@ class MeResource(Resource):
 # ======================================
 @auth_ns.route("/refresh")
 class RefreshTokenResource(Resource):
-    """
-    Refresh access token menggunakan refresh token
-    """
+
     @jwt_required(refresh=True)
     @measure_execution_time
     def post(self):
+        """Akses: (admin, pegawai), Refresh access token menggunakan refresh token"""
         # ambil data dari JWT
         identity = get_jwt_identity()
         jwt_data = get_jwt()
@@ -247,13 +241,12 @@ class RefreshTokenResource(Resource):
 # ======================================
 @auth_ns.route("/change-password")
 class ChangePasswordResource(Resource):
-    """
-    Ganti password admin / pegawai
-    """
+    
     @auth_ns.expect(change_password_model, validate=True)
     @jwt_required()
     @measure_execution_time
     def put(self):
+        """Akses: (admin, pegawai), Ganti password user sedang login"""
         body = request.get_json(silent=True) or {}
 
         old_password = body.get("old_password")
