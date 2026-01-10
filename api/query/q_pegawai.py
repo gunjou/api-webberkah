@@ -93,7 +93,7 @@ def get_all_pegawai_core():
         LEFT JOIN auth_pegawai ap ON ap.id_pegawai = p.id_pegawai AND ap.status = 1
 
         WHERE p.status = 1
-        ORDER BY p.id_pegawai ASC
+        ORDER BY p.tanggal_masuk ASC, p.id_pegawai ASC
     """)
 
     with engine.connect() as conn:

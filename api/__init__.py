@@ -13,6 +13,7 @@ load_dotenv()
 
 from api.auth import auth_ns
 from api.master import master_ns
+from api.export import export_ns
 from api.pegawai import pegawai_ns
 
 app = Flask(__name__)
@@ -62,6 +63,7 @@ api = Api(
 # ==============================
 api.add_namespace(auth_ns, path="/auth")
 api.add_namespace(master_ns, path="/master")
+api.add_namespace(export_ns, path="/export")
 api.add_namespace(pegawai_ns, path="/pegawai")
 
 

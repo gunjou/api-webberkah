@@ -39,6 +39,15 @@ def _validate_image_file(file: FileStorage):
 
     if not file.mimetype.startswith("image/"):
         raise ValidationError("File harus berupa gambar")
+    
+def safe_str(value):
+    if value is None:
+        return "-"
+    if value is "":
+        return "-"
+    if hasattr(value, "strftime"):
+        return value.strftime("%d-%m-%Y")
+    return str(value)
 
 def serialize_value(obj):
     if isinstance(obj, list):
