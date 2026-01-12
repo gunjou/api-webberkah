@@ -129,6 +129,129 @@ def get_lokasi_absensi_by_pegawai(id_pegawai: int):
 
 
 # ==================================================
+# GET DATA PEGAWAI PER TAB
+# ==================================================
+def get_pegawai_profile():
+    """
+    Ambil data profile pegawai (CORE TAB)
+    """
+    sql = text("""
+        SELECT
+            p.id_pegawai, p.nip, p.nama_lengkap, p.nama_panggilan, p.jenis_kelamin, p.tanggal_masuk,
+            p.id_status_pegawai, p.id_jabatan, p.id_departemen, p.id_level_jabatan,
+            
+            sp.nama_status AS status_pegawai, j.nama_jabatan, d.nama_departemen, lj.nama_level AS level_jabatan,
+
+            pr.nik, pr.agama, pr.tempat_lahir, pr.tanggal_lahir, pr.status_nikah, pr.email_pribadi, pr.no_telepon, 
+            pr.alamat
+
+        FROM pegawai p
+        LEFT JOIN ref_status_pegawai sp
+            ON sp.id_status_pegawai = p.id_status_pegawai
+        LEFT JOIN ref_jabatan j
+            ON j.id_jabatan = p.id_jabatan
+        LEFT JOIN ref_departemen d
+            ON d.id_departemen = p.id_departemen
+        LEFT JOIN ref_level_jabatan lj
+            ON lj.id_level_jabatan = p.id_level_jabatan
+        LEFT JOIN pegawai_pribadi pr
+            ON pr.id_pegawai = p.id_pegawai
+           AND pr.status = 1
+        WHERE p.status = 1
+        ORDER BY p.tanggal_masuk ASC, p.id_pegawai ASC
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql).mappings().all()
+
+
+def get_pegawai_rekening():
+    """
+    Ambil data rekening pegawai (TAB REKENING)
+    """
+    sql = text("""
+        SELECT
+            p.id_pegawai, p.nip, p.nama_lengkap, p.tanggal_masuk, sp.nama_status AS status_pegawai, 
+            r.nama_bank, r.no_rekening, r.atas_nama
+        FROM pegawai p
+        LEFT JOIN ref_status_pegawai sp
+            ON sp.id_status_pegawai = p.id_status_pegawai
+        LEFT JOIN pegawai_rekening r
+            ON r.id_pegawai = p.id_pegawai
+           AND r.status = 1
+        WHERE p.status = 1
+        ORDER BY p.tanggal_masuk ASC, p.id_pegawai ASC
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql).mappings().all()
+    
+
+def get_pegawai_pendidikan():
+    """
+    Ambil data pendidikan pegawai (TAB PENDIDIKAN)
+    """
+    sql = text("""
+        SELECT
+            p.id_pegawai, p.nip, p.nama_lengkap, p.tanggal_masuk, sp.nama_status AS status_pegawai,
+            pd.jenjang, pd.institusi, pd.jurusan, pd.tahun_masuk, pd.tahun_lulus
+        FROM pegawai p
+        LEFT JOIN ref_status_pegawai sp
+            ON sp.id_status_pegawai = p.id_status_pegawai
+        LEFT JOIN pegawai_pendidikan pd
+            ON pd.id_pegawai = p.id_pegawai
+           AND pd.status = 1
+        WHERE p.status = 1
+        ORDER BY p.tanggal_masuk ASC, p.id_pegawai ASC
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql).mappings().all()
+
+
+def get_pegawai_akun():
+    """
+    Ambil data akun sistem pegawai (TAB AKUN)
+    """
+    sql = text("""
+        SELECT
+            p.id_pegawai, p.nip, p.nama_lengkap, p.tanggal_masuk, sp.nama_status AS status_pegawai,
+            ap.username, ap.kode_pemulihan, ap.img_path, ap.last_login_at, ap.status AS auth_status
+        FROM pegawai p
+        LEFT JOIN ref_status_pegawai sp
+            ON sp.id_status_pegawai = p.id_status_pegawai
+        LEFT JOIN auth_pegawai ap
+            ON ap.id_pegawai = p.id_pegawai
+        WHERE p.status = 1
+        ORDER BY p.tanggal_masuk ASC, p.id_pegawai ASC
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql).mappings().all()
+
+
+def get_pegawai_lokasi():
+    """
+    Ambil data lokasi absensi pegawai (TAB LOKASI)
+    """
+    sql = text("""
+        SELECT
+            p.id_pegawai, p.nip, p.nama_lengkap, p.tanggal_masuk, sp.nama_status AS status_pegawai,
+            la.id_lokasi, la.nama_lokasi, la.latitude, la.longitude, la.radius_meter
+        FROM pegawai p
+        LEFT JOIN ref_status_pegawai sp
+            ON sp.id_status_pegawai = p.id_status_pegawai
+        LEFT JOIN pegawai_lokasi_absensi pla
+            ON pla.id_pegawai = p.id_pegawai
+           AND pla.status = 1
+        LEFT JOIN ref_lokasi_absensi la
+            ON la.id_lokasi = pla.id_lokasi
+           AND la.status = 1
+        WHERE p.status = 1
+        ORDER BY p.tanggal_masuk ASC, p.id_pegawai ASC
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql).mappings().all()
+
+
+
+# ==================================================
 # REGISTER PEGAWAI BARU
 # ==================================================
 def register_pegawai(

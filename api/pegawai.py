@@ -104,7 +104,7 @@ class PegawaiListResource(Resource):
                 "nama_lengkap": row["nama_lengkap"],
                 "nama_panggilan": row["nama_panggilan"],
                 "jenis_kelamin": row["jenis_kelamin"],
-                "tanggal_masuk": row["tanggal_masuk"],
+                "tanggal_masuk": row["tanggal_masuk"].strftime('%d-%m-%Y') if row["tanggal_masuk"] else "-",
 
                 "id_departemen": row["id_departemen"],
                 "departemen": row["nama_departemen"],
@@ -154,6 +154,198 @@ class PegawaiListResource(Resource):
         return success(
             data=result,
             message="List pegawai lengkap",
+            meta={"total": len(result)}
+        )
+
+
+# ==================================================
+# GET DATA PEGAWAI PER TAB
+# ==================================================
+@pegawai_ns.route("/profile")
+class PegawaiProfileListResource(Resource):
+
+    @role_required("admin")
+    @measure_execution_time
+    def get(self):
+        """(admin) Get list profile pegawai (CORE TAB)"""
+        rows = get_pegawai_profile()
+        result = []
+
+        for row in rows:
+            result.append({
+                "id_pegawai": row["id_pegawai"],
+                "nip": row["nip"],
+                "nama_lengkap": row["nama_lengkap"],
+                "nama_panggilan": row["nama_panggilan"],
+                "jenis_kelamin": row["jenis_kelamin"],
+                "tanggal_masuk": row["tanggal_masuk"],
+
+                "id_status_pegawai": row["id_status_pegawai"],
+                "status_pegawai": row["status_pegawai"],
+                "id_jabatan": row["id_jabatan"],
+                "jabatan": row["nama_jabatan"],
+                "id_departemen": row["id_departemen"],
+                "departemen": row["nama_departemen"],
+                "id_level_jabatan": row["id_level_jabatan"],
+                "level_jabatan": row["level_jabatan"],
+
+                "nik": row["nik"],
+                "agama": row["agama"],
+                "tempat_lahir": row["tempat_lahir"],
+                "tanggal_lahir": row["tanggal_lahir"],
+                "status_nikah": row["status_nikah"],
+
+                "email": row["email_pribadi"],
+                "no_telepon": row["no_telepon"],
+                "alamat": row["alamat"],
+            })
+
+        return success(
+            data=result,
+            message="List profile pegawai",
+            meta={"total": len(result)}
+        )
+
+
+@pegawai_ns.route("/rekening")
+class PegawaiRekeningListResource(Resource):
+
+    @role_required("admin")
+    @measure_execution_time
+    def get(self):
+        """(admin) Get data rekening pegawai (TAB REKENING)"""
+        rows = get_pegawai_rekening()
+        result = []
+
+        for row in rows:
+            result.append({
+                "id_pegawai": row["id_pegawai"],
+                "nip": row["nip"],
+                "nama_lengkap": row["nama_lengkap"],
+                "tanggal_masuk": row["tanggal_masuk"],
+                "status_pegawai": row["status_pegawai"],
+
+                "nama_bank": row["nama_bank"],
+                "no_rekening": row["no_rekening"],
+                "atas_nama": row["atas_nama"],
+                
+            })
+
+        return success(
+            data=result,
+            message="List data rekening pegawai",
+            meta={"total": len(result)}
+        )
+
+
+@pegawai_ns.route("/pendidikan")
+class PegawaiPendidikanListResource(Resource):
+
+    @role_required("admin")
+    @measure_execution_time
+    def get(self):
+        """(admin) Get data pendidikan pegawai (TAB PENDIDIKAN)"""
+        rows = get_pegawai_pendidikan()
+        result = []
+
+        for row in rows:
+            result.append({
+                "id_pegawai": row["id_pegawai"],
+                "nip": row["nip"],
+                "nama_lengkap": row["nama_lengkap"],
+                "tanggal_masuk": row["tanggal_masuk"],
+                "status_pegawai": row["status_pegawai"],
+
+                "jenjang": row["jenjang"],
+                "institusi": row["institusi"],
+                "jurusan": row["jurusan"],
+                "tahun_masuk": row["tahun_masuk"],
+                "tahun_lulus": row["tahun_lulus"],
+            })
+
+        return success(
+            data=result,
+            message="List data pendidikan pegawai",
+            meta={"total": len(result)}
+        )
+
+
+@pegawai_ns.route("/akun")
+class PegawaiAkunListResource(Resource):
+
+    @role_required("admin")
+    @measure_execution_time
+    def get(self):
+        """(admin) Get data akun sistem pegawai (TAB AKUN)"""
+        rows = get_pegawai_akun()
+        result = []
+
+        for row in rows:
+            result.append({
+                "id_pegawai": row["id_pegawai"],
+                "nip": row["nip"],
+                "nama_lengkap": row["nama_lengkap"],
+                "tanggal_masuk": row["tanggal_masuk"],
+                "status_pegawai": row["status_pegawai"],
+
+                "username": row["username"],
+                "kode_pemulihan": row["kode_pemulihan"],
+                "img_path": row["img_path"],
+                "last_login_at": (
+                    row["last_login_at"].strftime("%d-%m-%Y %H:%M:%S")
+                    if row["last_login_at"] else None
+                ),
+                "status": row["auth_status"],
+            })
+
+        return success(
+            data=result,
+            message="List data akun sistem pegawai",
+            meta={"total": len(result)}
+        )
+
+
+@pegawai_ns.route("/lokasi")
+class PegawaiLokasiListResource(Resource):
+
+    @role_required("admin")
+    @measure_execution_time
+    def get(self):
+        """(admin) Get data lokasi absensi pegawai (TAB LOKASI)"""
+        rows = get_pegawai_lokasi()
+        result_map = {}
+
+        for row in rows:
+            pid = row["id_pegawai"]
+
+            if pid not in result_map:
+                result_map[pid] = {
+                    "id_pegawai": row["id_pegawai"],
+                    "nip": row["nip"],
+                    "nama_lengkap": row["nama_lengkap"],
+                    "tanggal_masuk": (
+                        row["tanggal_masuk"].strftime("%d-%m-%Y")
+                        if row["tanggal_masuk"] else None
+                    ),
+                    "status_pegawai": row["status_pegawai"],
+                    "lokasi_absensi": []
+                }
+
+            # jika pegawai punya lokasi
+            if row["id_lokasi"]:
+                result_map[pid]["lokasi_absensi"].append({
+                    "id_lokasi": row["id_lokasi"],
+                    "nama_lokasi": row["nama_lokasi"],
+                    "latitude": row["latitude"],
+                    "longitude": row["longitude"],
+                    "radius_meter": row["radius_meter"],
+                })
+
+        result = list(result_map.values())
+
+        return success(
+            data=result,
+            message="List data lokasi absensi pegawai",
             meta={"total": len(result)}
         )
 
