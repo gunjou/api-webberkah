@@ -693,3 +693,82 @@ def soft_delete_pegawai(id_pegawai: int):
         )
 
         return result.rowcount
+
+
+
+# ====================================================================================================
+# ENDPOINT PEGAWAI UNTUK DI HALAMAN ABSENSI PEGAWAI --> PROFILE PEGAWAI
+# ====================================================================================================
+def get_pegawai_profile_basic(id_pegawai: int):
+    sql = text("""
+        SELECT
+            p.nama_lengkap, p.nip, d.nama_departemen, j.nama_jabatan,
+            pr.no_telepon, pr.tanggal_lahir, pr.image_path, pr.email_pribadi,
+            r.nama_bank, r.no_rekening, r.atas_nama,
+            pd.jenjang, pd.institusi, pd.jurusan
+        FROM pegawai p
+        LEFT JOIN ref_departemen d ON d.id_departemen = p.id_departemen
+        LEFT JOIN ref_jabatan j ON j.id_jabatan = p.id_jabatan
+
+        LEFT JOIN pegawai_pribadi pr
+            ON pr.id_pegawai = p.id_pegawai AND pr.status = 1
+        LEFT JOIN pegawai_rekening r
+            ON r.id_pegawai = p.id_pegawai AND r.status = 1
+        LEFT JOIN pegawai_pendidikan pd
+            ON pd.id_pegawai = p.id_pegawai AND pd.status = 1
+
+        WHERE p.id_pegawai = :id_pegawai
+          AND p.status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(
+            sql, {"id_pegawai": id_pegawai}
+        ).mappings().first()
+
+
+def get_wilayah_absensi_pegawai(id_pegawai: int):
+    sql = text("""
+        SELECT
+            rl.nama_lokasi
+        FROM pegawai_lokasi_absensi pla
+        JOIN ref_lokasi_absensi rl
+            ON rl.id_lokasi = pla.id_lokasi
+        WHERE pla.id_pegawai = :id_pegawai
+          AND pla.status = 1
+          AND rl.status = 1
+        ORDER BY rl.nama_lokasi ASC
+    """)
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sql, {"id_pegawai": id_pegawai}
+        ).fetchall()
+
+    return [row[0] for row in rows]
+
+
+def get_pegawai_account_info(id_pegawai: int):
+    """
+    Ambil data dasar akun pegawai
+    """
+    sql = text("""
+        SELECT
+            p.nip,
+            p.nama_lengkap,
+            pr.email_pribadi AS email,
+            ap.username
+        FROM pegawai p
+        LEFT JOIN pegawai_pribadi pr
+            ON pr.id_pegawai = p.id_pegawai
+           AND pr.status = 1
+        LEFT JOIN auth_pegawai ap
+            ON ap.id_pegawai = p.id_pegawai
+           AND ap.status = 1
+        WHERE p.id_pegawai = :id_pegawai
+          AND p.status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(
+            sql, {"id_pegawai": id_pegawai}
+        ).mappings().first()

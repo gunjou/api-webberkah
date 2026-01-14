@@ -20,7 +20,7 @@ class AuthError(AppError):
         super().__init__(
             message=message,
             code="UNAUTHORIZED",
-            status_code=401
+            status_code=400
         )
 
 

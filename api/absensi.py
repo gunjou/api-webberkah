@@ -1,14 +1,15 @@
+from calendar import monthrange
 import os
 from dotenv import load_dotenv
 from flask_restx import Namespace, Resource
 from flask import request
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from flask_restx import reqparse
 from werkzeug.datastructures import FileStorage
 
 from api.shared.exceptions import ValidationError
-from api.shared.helper import get_wita
+from api.shared.helper import count_hari_dalam_bulan, get_wita
 from api.shared.response import success
 from api.utils.decorator import measure_execution_time
 from api.query.q_absensi import *
@@ -28,6 +29,10 @@ validate_parser.add_argument("id_jam_kerja", type=int, required=False, help="ID 
 
 absensi_basic_parser = reqparse.RequestParser()
 absensi_basic_parser.add_argument("tanggal", type=str, required=False, location="args", help="format: YYYY-MM-DD")
+
+absensi_bulanan_parser = absensi_ns.parser()
+absensi_bulanan_parser.add_argument("bulan", type=int, required=False, help="Bulan (1-12)")
+absensi_bulanan_parser.add_argument("tahun", type=int, required=False, help="Tahun (YYYY)")
 
 
 
@@ -545,6 +550,7 @@ class AbsensiDetailBasicResource(Resource):
                     "lokasi_masuk": absensi["lokasi_masuk"],
                     "jam_keluar": absensi["jam_keluar"].strftime("%H:%M") if absensi["jam_keluar"] else None,
                     "lokasi_keluar": absensi["lokasi_keluar"],
+                    "total_menit_kerja": absensi["total_menit_kerja"],
                     "menit_terlambat": absensi["menit_terlambat"],
                     "istirahat": [
                         {
@@ -559,4 +565,159 @@ class AbsensiDetailBasicResource(Resource):
                 }
             },
             message="Detail absensi"
+        )
+
+
+
+@absensi_ns.route("/list-basic")
+class AbsensiListBasicBulananResource(Resource):
+
+    @jwt_required()
+    @absensi_ns.expect(absensi_bulanan_parser)
+    @measure_execution_time
+    def get(self):
+        id_pegawai = int(get_jwt_identity())
+        args = absensi_bulanan_parser.parse_args()
+
+        now = get_wita()
+        bulan = args.get("bulan") or now.month
+        tahun = args.get("tahun") or now.year
+
+        # Tentukan range tanggal
+        start_date = date(tahun, bulan, 1)
+
+        last_day = monthrange(tahun, bulan)[1]
+        end_date = date(tahun, bulan, last_day)
+
+        # Jika bulan berjalan → sampai hari ini
+        if bulan == now.month and tahun == now.year:
+            end_date = now.date()
+
+        pegawai = get_pegawai_basic(id_pegawai)
+        absensi_map = get_absensi_bulanan(id_pegawai, start_date, end_date)
+
+        hasil = []
+        current_date = start_date
+
+        while current_date <= end_date:
+            row = absensi_map.get(current_date)
+
+            if row:
+                menit_kurang = max(
+                    0,
+                    row["jam_per_hari"] - (row["total_menit_kerja"] or 0)
+                )
+
+                presensi = {
+                    "jam_masuk": row["jam_masuk"].strftime("%H:%M") if row["jam_masuk"] else None,
+                    "jam_keluar": row["jam_keluar"].strftime("%H:%M") if row["jam_keluar"] else None,
+                    "total_menit_kerja": row["total_menit_kerja"],
+                    "total_menit_istirahat": row["total_menit_istirahat"],
+                    "menit_terlambat": row["menit_terlambat"]
+                }
+
+                jam_kerja = {
+                    "jam_mulai": row["jam_mulai"],
+                    "jam_selesai": row["jam_selesai"],
+                    "durasi_menit": row["jam_per_hari"]
+                }
+            else:
+                presensi = None
+                jam_kerja = {
+                    "jam_mulai": "08:00",
+                    "jam_selesai": "17:00",
+                    "durasi_menit": 480
+                }
+
+            hasil.append({
+                "tanggal": current_date.isoformat(),
+                "jam_kerja": jam_kerja,
+                "presensi": presensi
+            })
+
+            current_date += timedelta(days=1)
+
+        return success(
+            data={
+                "bulan": f"{tahun}-{str(bulan).zfill(2)}",
+                "pegawai": {
+                    "id_pegawai": id_pegawai,
+                    "nama_lengkap": pegawai["nama_lengkap"],
+                    "nama_panggilan": pegawai["nama_panggilan"]
+                },
+                "kehadiran": hasil
+            },
+            message="List kehadiran bulanan"
+        )
+
+
+def hitung_hari_kerja_efektif(start_date, end_date):
+    hari_libur = get_hari_libur_map(start_date, end_date)
+
+    total = 0
+    current = start_date
+
+    while current <= end_date:
+        # weekday(): Senin=0 ... Minggu=6
+        if current.weekday() != 6 and current not in hari_libur:
+            total += 1
+        current += timedelta(days=1)
+
+    return total
+
+@absensi_ns.route("/rekap-basic")
+class AbsensiRekapBasicBulananResource(Resource):
+
+    @jwt_required()
+    @absensi_ns.expect(absensi_bulanan_parser)
+    @measure_execution_time
+    def get(self):
+        """(pegawai) Rekap absensi bulanan"""
+
+        id_pegawai = int(get_jwt_identity())
+        args = absensi_bulanan_parser.parse_args()
+
+        now = get_wita()
+        bulan = args.get("bulan") or now.month
+        tahun = args.get("tahun") or now.year
+
+        start_date = date(tahun, bulan, 1)
+        last_day = monthrange(tahun, bulan)[1]
+        end_date = date(tahun, bulan, last_day)
+
+        # bulan berjalan → sampai hari ini
+        if bulan == now.month and tahun == now.year:
+            end_date = now.date()
+
+        pegawai = get_pegawai_basic(id_pegawai)
+        rekap = get_rekap_basic_absensi_bulanan(id_pegawai, start_date, end_date)
+
+        hari_kerja_efektif = hitung_hari_kerja_efektif(start_date, end_date)
+
+        total_hadir = rekap["total_hadir"] or 0
+        total_izin = 0   # dummy
+        total_sakit = 0  # dummy
+
+        total_alpha = max(
+            0,
+            hari_kerja_efektif - total_hadir - total_izin - total_sakit
+        )
+
+        return success(
+            data={
+                "bulan": f"{tahun}-{str(bulan).zfill(2)}",
+                "pegawai": {
+                    "id_pegawai": id_pegawai,
+                    "nama_lengkap": pegawai["nama_lengkap"]
+                },
+                "rekap": {
+                    "hadir": total_hadir,
+                    "izin": total_izin,
+                    "sakit": total_sakit,
+                    "alpha": total_alpha,
+                    "total_menit_kerja": rekap["total_menit_kerja"],
+                    "total_menit_terlambat": rekap["total_menit_terlambat"]
+                }
+            },
+            message="Rekap absensi bulanan"
         )

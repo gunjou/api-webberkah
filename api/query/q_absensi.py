@@ -381,7 +381,7 @@ def get_absensi_basic(id_pegawai: int, tanggal=None):
     """
     sql = text("""
         SELECT
-            a.id_absensi, a.tanggal, a.jam_masuk, a.jam_keluar, a.menit_terlambat,
+            a.id_absensi, a.tanggal, a.jam_masuk, a.jam_keluar, a.total_menit_kerja, a.menit_terlambat,
             lm.nama_lokasi AS lokasi_masuk,
             lk.nama_lokasi AS lokasi_keluar
         FROM absensi a
@@ -440,3 +440,68 @@ def get_istirahat_absensi(id_absensi: int):
         return conn.execute(
             sql, {"id_absensi": id_absensi}
         ).mappings().all()
+
+
+def get_absensi_bulanan(id_pegawai: int, start_date, end_date):
+    sql = text("""
+        SELECT
+            a.tanggal, a.jam_masuk, a.jam_keluar, a.total_menit_kerja, a.total_menit_istirahat, a.menit_terlambat,
+            jk.jam_mulai, jk.jam_selesai, jk.jam_per_hari
+        FROM absensi a
+        JOIN ref_jam_kerja jk ON jk.id_jam_kerja = a.id_jam_kerja
+        WHERE a.id_pegawai = :id_pegawai
+          AND a.tanggal BETWEEN :start_date AND :end_date
+          AND a.status = 1
+        ORDER BY a.tanggal ASC
+    """)
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sql,
+            {
+                "id_pegawai": id_pegawai,
+                "start_date": start_date,
+                "end_date": end_date
+            }
+        ).mappings().all()
+
+    return {row["tanggal"]: row for row in rows}
+
+
+def get_rekap_basic_absensi_bulanan(id_pegawai: int, start_date, end_date):
+    sql = text("""
+        SELECT
+            COUNT(a.id_absensi) AS total_hadir,
+            COALESCE(SUM(a.total_menit_kerja), 0) AS total_menit_kerja,
+            COALESCE(SUM(a.menit_terlambat), 0) AS total_menit_terlambat
+        FROM absensi a
+        WHERE a.id_pegawai = :id_pegawai
+          AND a.tanggal BETWEEN :start_date AND :end_date
+          AND a.status = 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(
+            sql,
+            {
+                "id_pegawai": id_pegawai,
+                "start_date": start_date,
+                "end_date": end_date
+            }
+        ).mappings().first()
+
+def get_hari_libur_map(start_date, end_date):
+    sql = text("""
+        SELECT tanggal
+        FROM ref_hari_libur
+        WHERE status = 1
+          AND tanggal BETWEEN :start_date AND :end_date
+    """)
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sql,
+            {
+                "start_date": start_date,
+                "end_date": end_date
+            }
+        ).fetchall()
+
+    return {row[0] for row in rows}  # set of date

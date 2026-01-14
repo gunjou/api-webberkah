@@ -1,7 +1,7 @@
 from datetime import datetime
 from flask import request
 from flask_restx import Namespace, Resource, fields, reqparse
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from werkzeug.security import generate_password_hash
 from werkzeug.datastructures import FileStorage
 
@@ -697,4 +697,77 @@ class PegawaiDeleteResource(Resource):
 
         return success(
             message="Pegawai berhasil dinonaktifkan"
+        )
+
+
+# ====================================================================================================
+# ENDPOINT PEGAWAI UNTUK DI HALAMAN ABSENSI PEGAWAI --> PROFILE PEGAWAI
+# ====================================================================================================
+@pegawai_ns.route("/profile-absen")
+class PegawaiProfileAbsenResource(Resource):
+
+    @jwt_required()
+    @measure_execution_time
+    def get(self):
+        """(pegawai) Ambil profile pegawai untuk keperluan ABSENSI"""
+
+        id_pegawai = int(get_jwt_identity())
+
+        data = get_pegawai_profile_basic(id_pegawai)
+        if not data:
+            raise NotFoundError("Data pegawai tidak ditemukan")
+
+        wilayah = get_wilayah_absensi_pegawai(id_pegawai)
+
+        return success(
+            message="Profile pegawai",
+            data={
+                "nama_lengkap": data["nama_lengkap"],
+                "nip": data["nip"],
+                "no_telepon": data["no_telepon"],
+                "tanggal_lahir": data["tanggal_lahir"],
+                "jabatan": data["nama_jabatan"],
+                "departemen": data["nama_departemen"],
+                "image_path": data["image_path"],
+                "email": data["email_pribadi"],
+
+                "rekening": {
+                    "nama_bank": data["nama_bank"],
+                    "no_rekening": data["no_rekening"],
+                    "atas_nama": data["atas_nama"]
+                },
+
+                "pendidikan": {
+                    "jenjang": data["jenjang"],
+                    "institusi": data["institusi"],
+                    "jurusan": data["jurusan"]
+                },
+
+                "wilayah_absensi": wilayah
+            }
+        )
+
+
+@pegawai_ns.route("/account-info")
+class PegawaiAccountInfoResource(Resource):
+
+    @jwt_required()
+    @measure_execution_time
+    def get(self):
+        """(pegawai) Data akun dasar pegawai"""
+
+        id_pegawai = int(get_jwt_identity())
+
+        data = get_pegawai_account_info(id_pegawai)
+        if not data:
+            raise NotFoundError("Data akun pegawai tidak ditemukan")
+
+        return success(
+            message="Data akun pegawai",
+            data={
+                "nip": data["nip"],
+                "nama_lengkap": data["nama_lengkap"],
+                "email": data["email"],
+                "username": data["username"]
+            }
         )

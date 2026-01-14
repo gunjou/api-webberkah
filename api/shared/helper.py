@@ -134,3 +134,6 @@ def upload_face_to_cdn(file_path: str):
         raise ValidationError("Response CDN tidak mengandung url")
 
     return data["url"]
+
+def count_hari_dalam_bulan(start_date, end_date):
+    return (end_date - start_date).days + 1
