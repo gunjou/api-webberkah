@@ -103,48 +103,68 @@ class PegawaiLoginResource(Resource):
     @measure_execution_time
     def post(self):
         """Akses: (pegawai), Login Pegawai Webberkah"""
+
         body = request.get_json(silent=True) or {}
 
         username = body.get("username")
         password = body.get("password")
+        kode_pemulihan = body.get("kode_pemulihan")
 
-        if not username or not password:
+        # 1️⃣ Validasi input minimum
+        if not username:
             raise ValidationError(
-                message="Username dan password wajib diisi",
+                message="Username wajib diisi",
+                errors={"username": "required"}
+            )
+
+        if not password and not kode_pemulihan:
+            raise ValidationError(
+                message="Password atau kode pemulihan wajib diisi",
                 errors={
-                    "username": "required",
-                    "password": "required"
+                    "password": "required_without:kode_pemulihan",
+                    "kode_pemulihan": "required_without:password"
                 }
             )
 
+        # 2️⃣ Ambil data pegawai
         pegawai = get_pegawai_by_username(username)
-
         if not pegawai:
             raise AuthError("Username tidak terdaftar")
 
         if pegawai["pegawai_status"] != 1:
-            raise AuthError("Pegawai tidak terdaftar atau sudah tidak aktif")
+            raise AuthError("Pegawai tidak aktif")
 
-        if not check_password_hash(pegawai["password_hash"], password):
-            raise AuthError("Password yang diinputkan salah")
+        # 3️⃣ Validasi kredensial
+        authenticated = False
 
+        # ➤ Login dengan password
+        if password and check_password_hash(pegawai["password_hash"], password):
+            authenticated = True
+
+        # ➤ Fallback login dengan kode pemulihan
+        elif kode_pemulihan and pegawai["kode_pemulihan"]:
+            if kode_pemulihan == pegawai["kode_pemulihan"]:
+                authenticated = True
+
+        if not authenticated:
+            raise AuthError("Kredensial tidak valid")
+
+        # 4️⃣ Generate token
         access_token = create_access_token(
             identity=str(pegawai["id_pegawai"]),
-            additional_claims={
-                "account_type": "pegawai"
-            }
+            additional_claims={"account_type": "pegawai"}
         )
 
         refresh_token = create_refresh_token(
             identity=str(pegawai["id_pegawai"]),
-            additional_claims={
-                "account_type": "pegawai"
-            }
+            additional_claims={"account_type": "pegawai"}
         )
 
+        # 5️⃣ Update last login
         update_pegawai_last_login(pegawai["id_auth_pegawai"])
 
         return success(
+            message="Login pegawai berhasil",
             data={
                 "access_token": access_token,
                 "refresh_token": refresh_token,
@@ -153,8 +173,7 @@ class PegawaiLoginResource(Resource):
                     "username": pegawai["username"],
                     "img_path": pegawai["img_path"]
                 }
-            },
-            message="Login pegawai berhasil"
+            }
         )
         
         
@@ -273,7 +292,7 @@ class ChangePasswordResource(Resource):
             raise AuthError("Password lama tidak sesuai")
 
         # update password baru
-        new_hash = generate_password_hash(new_password)
+        new_hash = generate_password_hash(new_password, method="pbkdf2:sha256")
 
         if account_type == "admin":
             update_admin_password(identity, new_hash)
