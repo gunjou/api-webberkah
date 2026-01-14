@@ -15,8 +15,13 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 def find_valid_lokasi(latitude, longitude, lokasi_list):
     """
     Cari lokasi absensi yang valid berdasarkan radius
+    (HANYA lokasi dengan koordinat)
     """
     for lokasi in lokasi_list:
+
+        if lokasi["latitude"] is None or lokasi["longitude"] is None:
+            continue
+
         jarak = calculate_distance(
             latitude,
             longitude,

@@ -52,12 +52,12 @@ def hitung_terlambat_istirahat(
     return (selesai_detik - batas_detik) // 60
 
 
-def hitung_total_menit_kerja(jam_masuk, jam_keluar, total_menit_istirahat: int):
-    masuk = (jam_masuk.hour * 3600 + jam_masuk.minute * 60 + jam_masuk.second)
-    keluar = (jam_keluar.hour * 3600 + jam_keluar.minute * 60 + jam_keluar.second)
+def hitung_total_menit_kerja(jam_masuk, jam_keluar, total_menit_istirahat):
+    menit_masuk = jam_masuk.hour * 60 + jam_masuk.minute
+    menit_keluar = jam_keluar.hour * 60 + jam_keluar.minute
 
-    if keluar <= masuk:
-        return 0
+    if menit_keluar < menit_masuk:
+        menit_keluar += 24 * 60  # lintas hari
 
-    total_menit = (keluar - masuk) // 60
-    return max(total_menit - (total_menit_istirahat or 0), 0)
+    total = menit_keluar - menit_masuk - (total_menit_istirahat or 0)
+    return max(total, 0)

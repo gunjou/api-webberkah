@@ -1,7 +1,9 @@
+import os
+from dotenv import load_dotenv
 from flask_restx import Namespace, Resource
 from flask import request
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from flask_restx import reqparse
 from werkzeug.datastructures import FileStorage
 
@@ -16,10 +18,16 @@ from api.utils.time_calc import *
 
 absensi_ns = Namespace("absensi", description="Absensi Pegawai")
 
+load_dotenv()
+
 validate_parser = reqparse.RequestParser()
 validate_parser.add_argument("file", type=FileStorage, location="files", required=True, help="Foto wajah pegawai")
 validate_parser.add_argument("latitude", type=float, location="form", required=True, help="Latitude lokasi absensi")
 validate_parser.add_argument("longitude", type=float, location="form", required=True, help="Longitude lokasi absensi")
+validate_parser.add_argument("id_jam_kerja", type=int, required=False, help="ID jam kerja (opsional, default Normal)")
+
+absensi_basic_parser = reqparse.RequestParser()
+absensi_basic_parser.add_argument("tanggal", type=str, required=False, location="args", help="format: YYYY-MM-DD")
 
 
 
@@ -28,19 +36,27 @@ validate_parser.add_argument("longitude", type=float, location="form", required=
 # ==================================================
 def validate_lokasi_absensi(id_pegawai: int, latitude: float, longitude: float) -> dict:
     """
-    Validasi lokasi absensi dengan alur:
-    1. Lokasi fisik valid (radius & koordinat)
-    2. Pegawai memiliki akses ke lokasi tersebut
+    Validasi lokasi absensi:
+    - Lokasi fisik → radius + akses pegawai
+    - Jika gagal → cek WFH
     """
 
-    # 1️⃣ Validasi lokasi fisik
+    # 1️⃣ Ambil semua lokasi aktif
     all_lokasi = get_all_lokasi_absensi()
-    lokasi_valid = find_valid_lokasi(latitude, longitude, all_lokasi)
 
+    lokasi_valid = find_valid_lokasi(latitude=latitude, longitude=longitude, lokasi_list=all_lokasi)
+
+    # 2️⃣ Jika lokasi fisik TIDAK valid → cek WFH
     if not lokasi_valid:
-        raise ValidationError("Lokasi tidak valid untuk absensi")
+        if is_pegawai_wfh(id_pegawai):
+            return {
+                "id_lokasi": os.getenv("ID_LOKASI_WFH"),
+                "nama_lokasi": "WFH",
+                "is_wfh": True
+            }
+        raise ValidationError("Anda tidak berada di lokasi absensi yang diizinkan")
 
-    # 2️⃣ Validasi akses pegawai ke lokasi
+    # 3️⃣ Lokasi fisik valid → cek akses pegawai
     allowed_lokasi_ids = get_allowed_lokasi_ids_pegawai(id_pegawai)
 
     if lokasi_valid["id_lokasi"] not in allowed_lokasi_ids:
@@ -49,8 +65,27 @@ def validate_lokasi_absensi(id_pegawai: int, latitude: float, longitude: float) 
             "namun tidak terdaftar di lokasi tersebut"
         )
 
+    lokasi_valid["is_wfh"] = False
     return lokasi_valid
 
+def get_tanggal_absensi(now, jam_mulai_shift):
+    """
+    Menentukan tanggal absensi berdasarkan jam mulai shift.
+    Aturan:
+    - Jika waktu sekarang >= jam mulai shift → tanggal hari ini
+    - Jika waktu sekarang < jam mulai shift → tanggal kemarin
+      (khusus shift lintas hari / malam)
+    """
+
+    # Shift normal / sore (tidak lintas hari)
+    jam_mulai_dt = datetime.combine(now.date(), jam_mulai_shift)
+    batas_mulai = jam_mulai_dt - timedelta(hours=2)
+
+    # Shift normal / sore (tidak lintas hari)
+    if now >= batas_mulai:
+        return now.date()
+
+    return (now - timedelta(days=1)).date()
 
 
 # ==================================================
@@ -64,18 +99,22 @@ class AbsensiHariIniResource(Resource):
     def get(self):
         """(pegawai) Ambil status absensi harian --> absen"""
         id_pegawai = int(get_jwt_identity())
+        now = get_wita()
 
-        # ambil tanggal dari query param
-        tanggal_str = request.args.get("tanggal")
-        if tanggal_str:
-            tanggal = datetime.strptime(tanggal_str, "%Y-%m-%d").date()
-        else:
-            tanggal = get_wita().date()
+        # 1️⃣ Ambil absensi aktif dulu (penting untuk shift malam)
+        data = get_active_absensi_untuk_harian(id_pegawai)
 
-        data = get_absensi_harian(
-            id_pegawai=id_pegawai,
-            tanggal=tanggal
-        )
+        # 2️⃣ Jika tidak ada absensi aktif, fallback ke tanggal
+        if not data:
+            tanggal_str = request.args.get("tanggal")
+            if tanggal_str:
+                tanggal = datetime.strptime(tanggal_str, "%Y-%m-%d").date()
+            else:
+                tanggal = now.date()
+
+            data = get_absensi_harian(id_pegawai, tanggal)
+            
+        is_shift = has_active_shift(id_pegawai)
 
         # jika belum ada absensi sama sekali
         if not data or not data["id_absensi"]:
@@ -84,7 +123,8 @@ class AbsensiHariIniResource(Resource):
                     "pegawai": {
                         "id_pegawai": id_pegawai,
                         "nama_lengkap": data["nama_lengkap"] if data else None,
-                        "nama_panggilan": data["nama_panggilan"] if data else None
+                        "nama_panggilan": data["nama_panggilan"] if data else None,
+                        "is_shift": is_shift if is_shift else None
                     },
                     "tanggal": tanggal.isoformat(),
                     "jam_kerja": None,
@@ -112,8 +152,10 @@ class AbsensiHariIniResource(Resource):
                     "id_pegawai": data["id_pegawai"],
                     "nama_lengkap": data["nama_lengkap"],
                     "nama_panggilan": data["nama_panggilan"],
+                    "is_shift": is_shift if is_shift else None,
                 },
                 "jam_kerja": {
+                    "id_jam_kerja": data["id_jam_kerja"],
                     "nama_shift": data["nama_shift"] or "Normal",
                     "durasi_menit": data["jam_per_hari"],
                     "jam_mulai": data["jam_mulai"],
@@ -161,29 +203,46 @@ class AbsensiCheckInResource(Resource):
         file = args["file"]
         latitude = args["latitude"]
         longitude = args["longitude"]
+        id_jam_kerja = args.get("id_jam_kerja") or 1
 
         now = get_wita()
-        tanggal = now.date()
         jam_masuk = now.time()
 
         # 2️⃣ Validasi awal
-        if is_already_checkin(id_pegawai, tanggal):
-            raise ValidationError("Anda sudah melakukan absensi masuk hari ini")
+        if is_already_checkin(id_pegawai):
+            raise ValidationError("Anda masih memiliki absensi aktif")
 
         if not verify_face(id_pegawai, file):
             raise ValidationError("Wajah tidak cocok dengan data pegawai")
 
         # 3️⃣ Validasi lokasi
-        lokasi_valid = validate_lokasi_absensi(id_pegawai=id_pegawai, latitude=latitude, longitude=longitude)
-
-        # 4️⃣ Hitung jam kerja & keterlambatan
-        id_jam_kerja = 1  # ⬅️ default (siap dikembangkan ke shift)
-        menit_terlambat = hitung_menit_terlambat(
-            jam_masuk=jam_masuk,
-            jam_mulai_kerja=time(8, 0)
+        lokasi_valid = validate_lokasi_absensi(
+            id_pegawai=id_pegawai,
+            latitude=latitude,
+            longitude=longitude
         )
 
-        # 5️⃣ Simpan absensi
+        # 4️⃣ Validasi jam kerja pegawai
+        if not is_valid_jam_kerja_pegawai(id_pegawai, id_jam_kerja):
+            raise ValidationError("Anda tidak diperbolehkan mengambil jam kerja ini")
+
+        # 5️⃣ Hitung keterlambatan (pakai jam mulai shift)
+        jam_kerja = get_jam_kerja_by_id(id_jam_kerja)
+        if not jam_kerja:
+            raise ValidationError("Jam kerja tidak valid")
+
+        jam_mulai_kerja = jam_kerja["jam_mulai"]
+        tanggal = get_tanggal_absensi(
+            now=now,
+            jam_mulai_shift=jam_mulai_kerja
+        )
+        print(tanggal)
+        menit_terlambat = hitung_menit_terlambat(
+            jam_masuk=jam_masuk,
+            jam_mulai_kerja=jam_mulai_kerja
+        )
+
+        # 6️⃣ Simpan absensi
         id_absensi = insert_absensi_masuk(
             id_pegawai=id_pegawai,
             tanggal=tanggal,
@@ -192,14 +251,43 @@ class AbsensiCheckInResource(Resource):
             id_jam_kerja=id_jam_kerja,
             menit_terlambat=menit_terlambat
         )
-
-        # 6️⃣ Response
+        
+        # =====================================================
+        # SIMPAN ISTIRAHAT OTOMATIS UNTUK SHIFT CLEANING
+        # =====================================================
+        if id_jam_kerja in [2, 3]:
+            # Tentukan jam istirahat berdasarkan shift
+            # Shift 2 (Pagi): 12:00 - 14:00
+            # Shift 3 (Malam): 00:00 - 02:00
+            start_time = time(12, 0) if id_jam_kerja == 2 else time(0, 0)
+            end_time = time(14, 0) if id_jam_kerja == 2 else time(2, 0)
+            # 1. Insert mulai istirahat
+            id_istirahat = insert_istirahat_mulai(
+                id_absensi=id_absensi,
+                jam_mulai=start_time
+            )
+            # 2. Update selesai istirahat (Auto)
+            update_istirahat_selesai(
+                id_istirahat=id_istirahat,
+                jam_selesai=end_time,
+                durasi_menit=120,
+                id_lokasi_balik=lokasi_valid["id_lokasi"], # Gunakan lokasi check-in awal
+            )
+            # 3. Akumulasi ke table utama absensi
+            add_total_menit_istirahat(
+                id_absensi=id_absensi,
+                durasi_menit=120
+            )
+        # =====================================================
+        
+        # 7️⃣ Response
         return success(
             message="Absensi masuk berhasil",
             data={
                 "id_absensi": id_absensi,
                 "jam_masuk": jam_masuk.strftime("%H:%M:%S"),
                 "lokasi": lokasi_valid["nama_lokasi"],
+                "id_jam_kerja": id_jam_kerja,
                 "menit_terlambat": menit_terlambat
             }
         )
@@ -227,12 +315,12 @@ class AbsensiCheckoutResource(Resource):
         now_time = now.time()
 
         # 2️⃣ Ambil absensi untuk checkout
-        absensi = get_absensi_for_checkout(id_pegawai, tanggal)
+        absensi = get_active_absensi(id_pegawai)
         if not absensi:
             raise ValidationError("Anda belum melakukan absensi masuk")
 
-        if absensi["jam_keluar"] is not None:
-            raise ValidationError("Anda sudah melakukan check-out")
+        if absensi["jam_masuk"] is None:
+            raise ValidationError("Data absensi tidak valid")
 
         id_absensi = absensi["id_absensi"]
 
@@ -398,3 +486,77 @@ class AbsensiIstirahatSelesaiResource(Resource):
             }
         )
 
+
+
+# ====================================================
+# ENDPOINT UNTUK KEPERLUAN MENU HISTORY
+# ====================================================
+@absensi_ns.route("/detail-basic")
+class AbsensiDetailBasicResource(Resource):
+
+    @jwt_required()
+    @absensi_ns.expect(absensi_basic_parser)
+    @measure_execution_time
+    def get(self):
+        id_pegawai = int(get_jwt_identity())
+        args = absensi_basic_parser.parse_args()
+
+        tanggal = (
+            datetime.strptime(args["tanggal"], "%Y-%m-%d").date()
+            if args.get("tanggal") else None
+        )
+
+        pegawai = get_pegawai_basic(id_pegawai)
+        absensi = get_absensi_basic(id_pegawai, tanggal)
+
+        if not absensi:
+            return success(
+                data={
+                    "tanggal": tanggal.isoformat() if tanggal else None,
+                    "pegawai": {
+                        "id_pegawai": id_pegawai,
+                        "nama_lengkap": pegawai["nama_lengkap"] if pegawai else None,
+                        "nama_panggilan": pegawai["nama_panggilan"] if pegawai else None
+                    },
+                    "presensi": None
+                },
+                message="Belum ada data absensi"
+            )
+
+        istirahat = get_istirahat_absensi(absensi["id_absensi"])
+
+        jam_selesai_terakhir = next(
+            (i["jam_selesai"] for i in reversed(istirahat) if i["jam_selesai"]),
+            None
+        )
+
+        terlambat_istirahat = hitung_terlambat_istirahat(jam_selesai_terakhir)
+
+        return success(
+            data={
+                "tanggal": absensi["tanggal"].isoformat(),
+                "pegawai": {
+                    "id_pegawai": id_pegawai,
+                    "nama_lengkap": pegawai["nama_lengkap"],
+                    "nama_panggilan": pegawai["nama_panggilan"]
+                },
+                "presensi": {
+                    "jam_masuk": absensi["jam_masuk"].strftime("%H:%M") if absensi["jam_masuk"] else None,
+                    "lokasi_masuk": absensi["lokasi_masuk"],
+                    "jam_keluar": absensi["jam_keluar"].strftime("%H:%M") if absensi["jam_keluar"] else None,
+                    "lokasi_keluar": absensi["lokasi_keluar"],
+                    "menit_terlambat": absensi["menit_terlambat"],
+                    "istirahat": [
+                        {
+                            "jam_mulai": i["jam_mulai"].strftime("%H:%M"),
+                            "jam_selesai": i["jam_selesai"].strftime("%H:%M") if i["jam_selesai"] else None,
+                            "durasi_menit": i["durasi_menit"],
+                            "terlambat_istirahat": terlambat_istirahat,
+                            "lokasi_balik": i["lokasi_balik"]
+                        }
+                        for i in istirahat
+                    ]
+                }
+            },
+            message="Detail absensi"
+        )

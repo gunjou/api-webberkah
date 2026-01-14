@@ -62,6 +62,61 @@ def get_active_istirahat(id_absensi: int):
             sql, {"id_absensi": id_absensi}
         ).mappings().first()
 
+# HELPER UNTUK MENDAPATKAN APAKAH PEGAWAI BOLEH PILIH SHIFT
+def has_active_shift(id_pegawai: int) -> bool:
+    sql = text("""
+        SELECT 1
+        FROM pegawai_jam_kerja
+        WHERE id_pegawai = :id_pegawai
+          AND status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(
+            sql, {"id_pegawai": id_pegawai}
+        ).first() is not None
+
+# HELPER UNTUK MENDAPATKAN JAM MULAI KERJA YANG DIHITUNG UNTUK KETERLAMBATAN
+def is_valid_jam_kerja_pegawai(id_pegawai: int, id_jam_kerja: int) -> bool:
+    """Cek apakah pegawai boleh mengambil jam kerja ini"""
+    # Shift normal (id=1) selalu valid
+    if id_jam_kerja == 1:
+        return True
+
+    sql = text("""
+        SELECT 1
+        FROM pegawai_jam_kerja
+        WHERE id_pegawai = :id_pegawai
+          AND id_jam_kerja = :id_jam_kerja
+          AND status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(
+            sql,
+            {
+                "id_pegawai": id_pegawai,
+                "id_jam_kerja": id_jam_kerja
+            }
+        ).first() is not None
+
+# MENGAMBIL DATA PEGAWAI YANG DIIZINKAN WFH
+def is_pegawai_wfh(id_pegawai: int) -> bool:
+    """
+    Cek apakah pegawai diizinkan WFH
+    """
+    sql = text("""
+        SELECT 1
+        FROM pegawai_wfh
+        WHERE id_pegawai = :id_pegawai
+          AND status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(
+            sql, {"id_pegawai": id_pegawai}
+        ).first() is not None
+
 
 
 # ==================================================
@@ -73,7 +128,8 @@ def get_absensi_harian(id_pegawai: int, tanggal):
     """
     sql = text("""
         SELECT
-            p.id_pegawai, p.nama_lengkap, p.nama_panggilan, a.id_absensi, a.tanggal, a.jam_masuk, a.jam_keluar, a.menit_terlambat,
+            p.id_pegawai, p.nama_lengkap, p.nama_panggilan, a.id_absensi, a.tanggal, a.jam_masuk, a.jam_keluar, 
+            a.menit_terlambat, a.id_jam_kerja,
             jk.nama_shift, jk.jam_per_hari, jk.jam_mulai, jk.jam_selesai, 
             lm.nama_lokasi AS lokasi_masuk, lk.nama_lokasi AS lokasi_keluar
         FROM pegawai p
@@ -99,6 +155,33 @@ def get_absensi_harian(id_pegawai: int, tanggal):
                 "tanggal": tanggal
             }
         ).mappings().first()
+
+
+def get_active_absensi_untuk_harian(id_pegawai: int):
+    sql = text("""
+        SELECT
+            a.id_absensi, a.tanggal, a.jam_masuk, a.jam_keluar, a.menit_terlambat, a.total_menit_istirahat, 
+            a.id_jam_kerja, p.id_pegawai, p.nama_lengkap, p.nama_panggilan,
+
+            jk.nama_shift, jk.jam_per_hari, jk.jam_mulai, jk.jam_selesai,
+
+            lm.nama_lokasi AS lokasi_masuk,
+            lk.nama_lokasi AS lokasi_keluar
+
+        FROM absensi a
+        JOIN pegawai p ON p.id_pegawai = a.id_pegawai
+        LEFT JOIN ref_jam_kerja jk ON jk.id_jam_kerja = a.id_jam_kerja
+        LEFT JOIN ref_lokasi_absensi lm ON lm.id_lokasi = a.id_lokasi_masuk
+        LEFT JOIN ref_lokasi_absensi lk ON lk.id_lokasi = a.id_lokasi_keluar
+        WHERE a.id_pegawai = :id_pegawai
+          AND a.jam_keluar IS NULL
+          AND a.status = 1
+        ORDER BY a.tanggal DESC
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql, {"id_pegawai": id_pegawai}).mappings().first()
+
 
 # HELPER UNTUK GET DATA ABSENSI HARIAN
 def get_istirahat_absensi(id_absensi: int):
@@ -128,20 +211,38 @@ def get_istirahat_absensi(id_absensi: int):
 # ==================================================
 
 # HELPER UNTUK VALIDASI CHECKIN APAKAH SUDAH CHECKIN ATAU TIDAK
-def is_already_checkin(id_pegawai: int, tanggal):
+def is_already_checkin(id_pegawai: int) -> bool:
+    """
+    Cek apakah pegawai masih memiliki absensi aktif
+    (belum checkout)
+    """
     sql = text("""
         SELECT 1
         FROM absensi
-        WHERE id_pegawai = :id
-          AND tanggal = :tanggal
+        WHERE id_pegawai = :id_pegawai
+          AND jam_keluar IS NULL
           AND status = 1
         LIMIT 1
     """)
     with engine.connect() as conn:
-        return conn.execute(sql, {
-            "id": id_pegawai,
-            "tanggal": tanggal
-        }).first() is not None
+        return conn.execute(
+            sql, {"id_pegawai": id_pegawai}
+        ).first() is not None
+
+def get_jam_kerja_by_id(id_jam_kerja: int):
+    sql = text("""
+        SELECT
+            id_jam_kerja, nama_shift, jam_mulai, jam_selesai, jam_per_hari
+        FROM ref_jam_kerja
+        WHERE id_jam_kerja = :id_jam_kerja
+          AND status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(
+            sql,
+            {"id_jam_kerja": id_jam_kerja}
+        ).mappings().first()
 
 def insert_absensi_masuk(
     id_pegawai: int, tanggal, jam_masuk, id_lokasi_masuk: int, id_jam_kerja: int, menit_terlambat: int
@@ -168,21 +269,25 @@ def insert_absensi_masuk(
 
 
 # HELPER UNTUK VALIDASI CHECKOUT KALAU SUDAH CHECKIN
-def get_absensi_for_checkout(id_pegawai: int, tanggal):
+def get_active_absensi(id_pegawai: int):
+    """
+    Ambil absensi aktif (belum checkout),
+    berlaku untuk semua jenis shift (normal & malam)
+    """
     sql = text("""
         SELECT
-            id_absensi, jam_masuk, jam_keluar, total_menit_istirahat
-        FROM absensi
-        WHERE id_pegawai = :id
-          AND tanggal = :tanggal
-          AND status = 1
+            a.id_absensi, a.tanggal, a.jam_masuk, a.total_menit_istirahat, a.id_jam_kerja
+        FROM absensi a
+        WHERE a.id_pegawai = :id_pegawai
+          AND a.jam_keluar IS NULL
+          AND a.status = 1
+        ORDER BY a.tanggal DESC
         LIMIT 1
     """)
     with engine.connect() as conn:
-        return conn.execute(sql, {
-            "id": id_pegawai,
-            "tanggal": tanggal
-        }).mappings().first()
+        return conn.execute(
+            sql, {"id_pegawai": id_pegawai}
+        ).mappings().first()
         
 def update_absensi_checkout(id_absensi: int, jam_keluar, id_lokasi_keluar: int, total_menit_kerja: int):
     sql = text("""
@@ -264,3 +369,74 @@ def add_total_menit_istirahat(id_absensi: int, durasi_menit: int):
         })
 
 
+
+# ====================================================
+# ENDPOINT UNTUK KEPERLUAN MENU HISTORY
+# ====================================================
+def get_absensi_basic(id_pegawai: int, tanggal=None):
+    """
+    Ambil absensi basic:
+    - Jika tanggal diisi → ambil absensi tanggal tsb
+    - Jika tidak → ambil absensi aktif / terakhir
+    """
+    sql = text("""
+        SELECT
+            a.id_absensi, a.tanggal, a.jam_masuk, a.jam_keluar, a.menit_terlambat,
+            lm.nama_lokasi AS lokasi_masuk,
+            lk.nama_lokasi AS lokasi_keluar
+        FROM absensi a
+        LEFT JOIN ref_lokasi_absensi lm ON lm.id_lokasi = a.id_lokasi_masuk
+        LEFT JOIN ref_lokasi_absensi lk ON lk.id_lokasi = a.id_lokasi_keluar
+        WHERE a.id_pegawai = :id_pegawai
+          AND a.status = 1
+          AND (
+                (:tanggal IS NOT NULL AND a.tanggal = :tanggal)
+             OR (:tanggal IS NULL)
+          )
+        ORDER BY
+            CASE
+                WHEN a.jam_keluar IS NULL THEN 0
+                ELSE 1
+            END,
+            a.tanggal DESC
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(
+            sql,
+            {
+                "id_pegawai": id_pegawai,
+                "tanggal": tanggal
+            }
+        ).mappings().first()
+
+
+def get_pegawai_basic(id_pegawai: int):
+    sql = text("""
+        SELECT
+            nama_lengkap, nama_panggilan
+        FROM pegawai
+        WHERE id_pegawai = :id_pegawai
+          AND status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(
+            sql, {"id_pegawai": id_pegawai}
+        ).mappings().first()
+
+
+def get_istirahat_absensi(id_absensi: int):
+    sql = text("""
+        SELECT
+            ai.jam_mulai, ai.jam_selesai, ai.durasi_menit, lb.nama_lokasi AS lokasi_balik
+        FROM absensi_istirahat ai
+        LEFT JOIN ref_lokasi_absensi lb ON lb.id_lokasi = ai.id_lokasi_balik
+        WHERE ai.id_absensi = :id_absensi
+          AND ai.status = 1
+        ORDER BY ai.jam_mulai ASC
+    """)
+    with engine.connect() as conn:
+        return conn.execute(
+            sql, {"id_absensi": id_absensi}
+        ).mappings().all()

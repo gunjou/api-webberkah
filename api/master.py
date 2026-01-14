@@ -1,4 +1,4 @@
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
 from flask import request
 from datetime import datetime
@@ -427,6 +427,33 @@ class JamKerjaDetailResource(Resource):
             raise NotFoundError("Jam kerja tidak ditemukan")
 
         return success(message="Jam kerja berhasil dihapus")
+
+
+@master_ns.route("/jam-kerja/pegawai")
+class PegawaiJamKerjaResource(Resource):
+
+    @jwt_required()
+    @measure_execution_time
+    def get(self):
+        """
+        (pegawai) Ambil daftar jam kerja yang boleh diambil pegawai
+        """
+        id_pegawai = int(get_jwt_identity())
+
+        rows = get_jam_kerja_by_pegawai(id_pegawai)
+
+        # Jika pegawai tidak punya privilege shift → fallback ke Normal
+        if not rows:
+            default_shift = get_default_jam_kerja()
+            return success(
+                data=[default_shift] if default_shift else [],
+                message="List jam kerja pegawai"
+            )
+
+        return success(
+            data=rows,
+            message="List jam kerja pegawai"
+        )
 
 
 

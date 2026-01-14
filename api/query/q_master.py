@@ -319,12 +319,12 @@ def delete_level_jabatan(id_level_jabatan: int):
     
     
 # ==================================================
-# REF LEVEL JABATAN
+# REF JAM KERJA (SHIFT)
 # ==================================================
 def get_jam_kerja_list():
     sql = text("""
         SELECT
-            id_jam_kerja, nama_shift, jam_per_hari, status, created_at, updated_at
+            id_jam_kerja, nama_shift, jam_per_hari, jam_mulai, jam_selesai, status, created_at, updated_at
         FROM ref_jam_kerja
         WHERE status = 1
         ORDER BY id_jam_kerja ASC
@@ -336,7 +336,7 @@ def get_jam_kerja_list():
 def get_jam_kerja_by_id(id_jam_kerja: int):
     sql = text("""
         SELECT
-            id_jam_kerja, nama_shift, jam_per_hari, status, created_at, updated_at
+            id_jam_kerja, nama_shift, jam_per_hari, jam_mulai, jam_selesai, status, created_at, updated_at
         FROM ref_jam_kerja
         WHERE id_jam_kerja = :id
           AND status = 1
@@ -346,6 +346,44 @@ def get_jam_kerja_by_id(id_jam_kerja: int):
         return conn.execute(
             sql, {"id": id_jam_kerja}
         ).mappings().first()
+        
+def get_jam_kerja_by_pegawai(id_pegawai: int):
+    """
+    Ambil daftar jam kerja yang boleh diambil pegawai
+    """
+    sql = text("""
+        SELECT
+            jk.id_jam_kerja, jk.nama_shift, jk.jam_per_hari, jk.jam_mulai, jk.jam_selesai, 
+            jk.status, jk.created_at, jk.updated_at
+        FROM pegawai_jam_kerja pjk
+        JOIN ref_jam_kerja jk
+            ON jk.id_jam_kerja = pjk.id_jam_kerja
+        WHERE pjk.id_pegawai = :id_pegawai
+          AND pjk.status = 1
+          AND jk.status = 1
+        ORDER BY jk.id_jam_kerja ASC
+    """)
+    with engine.connect() as conn:
+        return conn.execute(
+            sql,
+            {"id_pegawai": id_pegawai}
+        ).mappings().all()
+
+
+def get_default_jam_kerja():
+    """
+    Ambil shift default (Normal)
+    """
+    sql = text("""
+        SELECT
+            id_jam_kerja, nama_shift, jam_per_hari, jam_mulai, jam_selesai, status, created_at, updated_at
+        FROM ref_jam_kerja
+        WHERE id_jam_kerja = 1
+          AND status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql).mappings().first()
 
 
 def create_jam_kerja(nama_shift: str, jam_per_hari: int):
