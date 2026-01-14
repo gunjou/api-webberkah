@@ -108,7 +108,7 @@ class PegawaiLoginResource(Resource):
 
         username = body.get("username")
         password = body.get("password")
-        kode_pemulihan = body.get("kode_pemulihan")
+        kode_pemulihan = body.get("password")
 
         # 1️⃣ Validasi input minimum
         if not username:
