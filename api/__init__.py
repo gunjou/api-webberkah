@@ -17,6 +17,7 @@ from api.export import export_ns
 from api.pegawai import pegawai_ns
 from api.absensi import absensi_ns
 from api.perizinan import perizinan_ns
+from api.presensi import presensi_ns
 from api.lembur import lembur_ns
 
 app = Flask(__name__)
@@ -70,6 +71,7 @@ api.add_namespace(export_ns, path="/export")
 api.add_namespace(pegawai_ns, path="/pegawai")
 api.add_namespace(absensi_ns, path="/absensi")
 api.add_namespace(perizinan_ns, path="/perizinan")
+api.add_namespace(presensi_ns, path="/presensi")
 api.add_namespace(lembur_ns, path="/lembur")
 
 

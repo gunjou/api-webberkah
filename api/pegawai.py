@@ -159,6 +159,37 @@ class PegawaiListResource(Resource):
 
 
 # ==================================================
+# GET DATA PEGAWAI BASIC ID DAN NAMA
+# ==================================================
+@pegawai_ns.route("/basic")
+class PegawaiBasicListResource(Resource):
+
+    @role_required("admin")
+    @measure_execution_time
+    def get(self):
+        """(admin) Get data basic pegawai (nama dan id)"""
+        rows = get_pegawai_basic()
+        result = []
+
+        for row in rows:
+            result.append({
+                "id_pegawai": row["id_pegawai"],
+                "nip": row["nip"],
+                "nama_lengkap": row["nama_lengkap"],
+                "nama_panggilan": row["nama_panggilan"],
+                "jenis_kelamin": row["jenis_kelamin"],
+                "tanggal_masuk": row["tanggal_masuk"],
+            })
+
+        return success(
+            data=result,
+            message="List data basic pegawai",
+            meta={"total": len(result)}
+        )
+
+
+
+# ==================================================
 # GET DATA PEGAWAI PER TAB
 # ==================================================
 @pegawai_ns.route("/profile")

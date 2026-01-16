@@ -129,6 +129,22 @@ def get_lokasi_absensi_by_pegawai(id_pegawai: int):
 
 
 # ==================================================
+# GET DATA PEGAWAI BASIC ID DAN NAMA
+# ==================================================
+def get_pegawai_basic():
+    sql = text("""
+        SELECT
+            p.id_pegawai, p.nip, p.nama_lengkap, p.nama_panggilan, p.jenis_kelamin, p.tanggal_masuk
+        FROM pegawai p
+        WHERE p.status = 1
+        ORDER BY p.nama_lengkap ASC
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql).mappings().fetchall()
+
+
+
+# ==================================================
 # GET DATA PEGAWAI PER TAB
 # ==================================================
 def get_pegawai_profile():
