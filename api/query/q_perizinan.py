@@ -87,3 +87,36 @@ def get_history_izin_bulanan(
                 "end_date": end_date
             }
         ).mappings().all()
+
+
+
+def get_izin_by_id(id_izin: int):
+    sql = text("""
+        SELECT
+            id_izin,
+            id_pegawai,
+            status_approval,
+            status
+        FROM izin
+        WHERE id_izin = :id
+          AND status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql, {"id": id_izin}).mappings().first()
+
+
+def soft_delete_izin(id_izin: int):
+    sql = text("""
+        UPDATE izin
+        SET
+            status = 0,
+            updated_at = :now
+        WHERE id_izin = :id
+    """)
+
+    with engine.begin() as conn:
+        conn.execute(sql, {
+            "id": id_izin,
+            "now": get_wita()
+        })

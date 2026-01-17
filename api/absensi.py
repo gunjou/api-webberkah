@@ -595,6 +595,7 @@ class AbsensiListBasicBulananResource(Resource):
 
         pegawai = get_pegawai_basic(id_pegawai)
         absensi_map = get_absensi_bulanan(id_pegawai, start_date, end_date)
+        hari_libur_set = get_hari_libur_map(start_date, end_date)
 
         hasil = []
         current_date = start_date
@@ -629,8 +630,23 @@ class AbsensiListBasicBulananResource(Resource):
                     "durasi_menit": 480
                 }
 
+            is_minggu = current_date.weekday() == 6  # 6 = Minggu
+            is_libur = current_date in hari_libur_set
+
+            if is_libur:
+                keterangan_hari = "Hari Libur"
+            elif is_minggu:
+                keterangan_hari = "Hari Minggu"
+            else:
+                keterangan_hari = "Hari Kerja"
+
             hasil.append({
                 "tanggal": current_date.isoformat(),
+                "hari": {
+                    "is_minggu": is_minggu,
+                    "is_libur": is_libur,
+                    "keterangan": keterangan_hari
+                },
                 "jam_kerja": jam_kerja,
                 "presensi": presensi
             })

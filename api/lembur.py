@@ -1,5 +1,5 @@
 from flask_restx import Namespace, Resource, reqparse
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import get_jwt, jwt_required, get_jwt_identity
 from werkzeug.datastructures import FileStorage
 from datetime import datetime, date, time
 
@@ -165,6 +165,7 @@ class LemburHistoryBulananResource(Resource):
                     "tanggal": l["tanggal"].isoformat(),
                     "jam_mulai": l["jam_mulai"].strftime("%H:%M"),
                     "jam_selesai": l["jam_selesai"].strftime("%H:%M"),
+                    "path_lampiran": l["path_lampiran"],
                     "menit_lembur": l["menit_lembur"],
                     "total_bayaran": l["total_bayaran"],
                     "status_approval": l["status_approval"],
@@ -178,4 +179,36 @@ class LemburHistoryBulananResource(Resource):
                 "tahun": tahun,
                 "total": len(lembur_list)
             }
+        )
+
+
+
+@lembur_ns.route("/<int:id_lembur>")
+class LemburDeleteResource(Resource):
+
+    @jwt_required()
+    @measure_execution_time
+    def delete(self, id_lembur):
+        """(pegawai/admin) Soft delete lembur"""
+
+        id_pegawai = int(get_jwt_identity())
+        jwt_data = get_jwt()
+        account_type = jwt_data.get("account_type")
+
+        lembur = get_lembur_by_id(id_lembur)
+        if not lembur:
+            raise ValidationError("Data lembur tidak ditemukan")
+
+        # 🔐 validasi kepemilikan
+        if account_type == "pegawai" and lembur["id_pegawai"] != id_pegawai:
+            raise ValidationError("Anda tidak berhak menghapus lembur ini")
+
+        # (opsional) cegah hapus jika sudah diproses
+        if lembur["status_approval"] in ("approved", "rejected"):
+            raise ValidationError("Lembur yang sudah diproses tidak dapat dihapus")
+
+        soft_delete_lembur(id_lembur)
+
+        return success(
+            message="Pengajuan lembur berhasil dihapus (soft delete)"
         )

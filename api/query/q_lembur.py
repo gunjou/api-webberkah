@@ -74,7 +74,7 @@ def get_history_lembur_bulanan(id_pegawai: int, bulan: int, tahun: int):
     sql = text("""
         SELECT
             l.id_lembur, l.id_jenis_lembur, jl.nama_jenis, l.tanggal, l.jam_mulai, l.jam_selesai, l.menit_lembur, 
-            l.total_bayaran, l.status_approval, l.keterangan, l.alasan_penolakan
+            l.path_lampiran, l.total_bayaran, l.status_approval, l.keterangan, l.alasan_penolakan
         FROM lembur l
         JOIN ref_jenis_lembur jl
             ON jl.id_jenis_lembur = l.id_jenis_lembur
@@ -93,3 +93,34 @@ def get_history_lembur_bulanan(id_pegawai: int, bulan: int, tahun: int):
                 "tahun": tahun
             }
         ).mappings().all()
+
+
+def get_lembur_by_id(id_lembur: int):
+    sql = text("""
+        SELECT
+            id_lembur,
+            id_pegawai,
+            status_approval,
+            status
+        FROM lembur
+        WHERE id_lembur = :id
+          AND status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql, {"id": id_lembur}).mappings().first()
+
+
+def soft_delete_lembur(id_lembur: int):
+    sql = text("""
+        UPDATE lembur
+        SET
+            status = 0,
+            updated_at = :now
+        WHERE id_lembur = :id
+    """)
+    with engine.begin() as conn:
+        conn.execute(sql, {
+            "id": id_lembur,
+            "now": get_wita()
+        })

@@ -1,6 +1,6 @@
 from flask_restx import Namespace, Resource, reqparse
 from flask import request
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import get_jwt, jwt_required, get_jwt_identity
 from werkzeug.datastructures import FileStorage
 from datetime import date, datetime, timedelta
 
@@ -183,4 +183,36 @@ class IzinHistoryResource(Resource):
                 "tahun": tahun,
                 "total": len(izin_list)
             }
+        )
+
+
+
+@perizinan_ns.route("/<int:id_izin>")
+class IzinDeleteResource(Resource):
+
+    @jwt_required()
+    @measure_execution_time
+    def delete(self, id_izin):
+        """(pegawai/admin) Soft delete pengajuan izin"""
+
+        id_pegawai = int(get_jwt_identity())
+        jwt_data = get_jwt()
+        account_type = jwt_data.get("account_type")
+
+        izin = get_izin_by_id(id_izin)
+        if not izin:
+            raise ValidationError("Data izin tidak ditemukan")
+
+        # 🔐 validasi kepemilikan (pegawai)
+        if account_type == "pegawai" and izin["id_pegawai"] != id_pegawai:
+            raise ValidationError("Anda tidak berhak menghapus izin ini")
+
+        # ❌ tidak boleh hapus izin yang sudah diproses
+        if izin["status_approval"] in ("approved", "rejected"):
+            raise ValidationError("Izin yang sudah diproses tidak dapat dihapus")
+
+        soft_delete_izin(id_izin)
+
+        return success(
+            message="Pengajuan izin berhasil dihapus (soft delete)"
         )
