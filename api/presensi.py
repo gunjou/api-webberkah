@@ -183,8 +183,8 @@ class PresensiUpdateResource(Resource):
 
         upsert_absensi_istirahat(
             id_absensi=id_absensi,
-            jam_mulai=args.get("istirahat_mulai"),
-            jam_selesai=args.get("istirahat_selesai"),
+            jam_mulai=parse_time(args.get("istirahat_mulai")),
+            jam_selesai=parse_time(args.get("istirahat_selesai")),
             id_lokasi_balik=args.get("id_lokasi_istirahat")
         )
 
@@ -278,8 +278,8 @@ class PresensiManualCreateResource(Resource):
         if ist_mulai or ist_selesai:
             upsert_absensi_istirahat(
                 id_absensi=id_absensi,
-                jam_mulai=ist_mulai,
-                jam_selesai=ist_selesai,
+                jam_mulai=parse_time(ist_mulai),
+                jam_selesai=parse_time(ist_selesai),
                 id_lokasi_balik=args.get("id_lokasi_istirahat")
             )
 
