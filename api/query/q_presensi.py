@@ -4,6 +4,24 @@ from api.shared.helper import get_wita
 
 
 # ======================================================================
+# HELPER PRESENSI HARIAN SEMUA PEGAWAI (ADMIN.WEBBERKAH)
+# ======================================================================
+def hitung_durasi_menit(jam_mulai, jam_selesai):
+    if not jam_mulai or not jam_selesai:
+        return 0
+
+    mulai = jam_mulai.hour * 60 + jam_mulai.minute
+    selesai = jam_selesai.hour * 60 + jam_selesai.minute
+
+    # shift lintas hari
+    if selesai < mulai:
+        selesai += 24 * 60
+
+    return max(0, selesai - mulai)
+
+
+
+# ======================================================================
 # QUERY GET DATA PRESENSI HARIAN SEMUA PEGAWAI (ADMIN.WEBBERKAH)
 # ======================================================================
 def get_admin_presensi_harian(tanggal, id_departemen=None, id_status_pegawai=None):
@@ -85,12 +103,14 @@ def update_absensi_manual(id_absensi: int, jam_masuk=None, jam_keluar=None, id_l
 # ISTIRAHAT UPSERT
 def upsert_absensi_istirahat(id_absensi: int, jam_mulai=None, jam_selesai=None, id_lokasi_balik=None):
     istirahat = get_active_istirahat(id_absensi)
+    durasi_menit = hitung_durasi_menit(jam_mulai, jam_selesai)
 
     params = {
         "id_absensi": id_absensi,
         "jam_mulai": jam_mulai,
         "jam_selesai": jam_selesai,
         "id_lokasi_balik": id_lokasi_balik,
+        "durasi_menit": durasi_menit,
         "now": get_wita()
     }
 
@@ -101,6 +121,7 @@ def upsert_absensi_istirahat(id_absensi: int, jam_mulai=None, jam_selesai=None, 
                 jam_mulai = :jam_mulai,
                 jam_selesai = :jam_selesai,
                 id_lokasi_balik = :id_lokasi_balik,
+                durasi_menit = :durasi_menit,
                 updated_at = :now
             WHERE id_istirahat = :id
         """)
@@ -108,14 +129,13 @@ def upsert_absensi_istirahat(id_absensi: int, jam_mulai=None, jam_selesai=None, 
     else:
         sql = text("""
             INSERT INTO absensi_istirahat (
-                id_absensi, jam_mulai, jam_selesai, id_lokasi_balik, status, created_at, updated_at
+                id_absensi, jam_mulai, jam_selesai, id_lokasi_balik, durasi_menit, status, created_at, updated_at
             ) VALUES (
-                :id_absensi, :jam_mulai, :jam_selesai, :id_lokasi_balik, 1, :now, :now
+                :id_absensi, :jam_mulai, :jam_selesai, :id_lokasi_balik, :durasi_menit, 1, :now, :now
             )
         """)
-
     with engine.begin() as conn:
-        conn.execute(sql, params)
+        conn.execute(sql, params) 
 
 
 def get_active_istirahat(id_absensi):

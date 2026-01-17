@@ -43,7 +43,7 @@ def get_izin_aktif_harian(id_pegawai: int, tanggal):
             ON ji.id_jenis_izin = i.id_jenis_izin
         WHERE i.id_pegawai = :id_pegawai
           AND i.status = 1
-          AND l.status_approval IN ('pending', 'approved')
+          AND i.status_approval IN ('pending', 'approved')
           AND :tanggal BETWEEN i.tgl_mulai AND i.tgl_selesai
         ORDER BY i.tgl_mulai ASC
     """)
