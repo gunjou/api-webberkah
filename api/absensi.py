@@ -174,7 +174,7 @@ class AbsensiHariIniResource(Resource):
                     "menit_terlambat": data["menit_terlambat"],
                     "istirahat": [
                         {
-                            "jam_mulai": i["jam_mulai"].strftime("%H:%M"),
+                            "jam_mulai": i["jam_mulai"].strftime("%H:%M") if i["jam_mulai"] else None,
                             "jam_selesai": i["jam_selesai"].strftime("%H:%M") if i["jam_selesai"] else None,
                             "durasi_menit": i["durasi_menit"],
                             "terlambat_istirahat": terlambat_istirahat,
@@ -554,7 +554,7 @@ class AbsensiDetailBasicResource(Resource):
                     "menit_terlambat": absensi["menit_terlambat"],
                     "istirahat": [
                         {
-                            "jam_mulai": i["jam_mulai"].strftime("%H:%M"),
+                            "jam_mulai": i["jam_mulai"].strftime("%H:%M") if i["jam_mulai"] else None,
                             "jam_selesai": i["jam_selesai"].strftime("%H:%M") if i["jam_selesai"] else None,
                             "durasi_menit": i["durasi_menit"],
                             "terlambat_istirahat": terlambat_istirahat,
