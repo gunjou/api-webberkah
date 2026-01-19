@@ -1,6 +1,7 @@
+from calendar import monthrange
 from flask_restx import Namespace, Resource, reqparse
 from flask_jwt_extended import jwt_required
-from datetime import datetime
+from datetime import date, datetime
 
 from api.query.q_master import get_jam_kerja_by_id
 from api.shared.response import success
@@ -41,6 +42,12 @@ manual_presensi_parser.add_argument("id_lokasi_keluar", type=int, required=False
 manual_presensi_parser.add_argument("istirahat_mulai", type=str, required=False)
 manual_presensi_parser.add_argument("istirahat_selesai", type=str, required=False)
 manual_presensi_parser.add_argument("id_lokasi_istirahat", type=int, required=False)
+
+rekap_bulanan_parser = reqparse.RequestParser()
+rekap_bulanan_parser.add_argument("bulan", type=int, required=False, help="Bulan (1-12)")
+rekap_bulanan_parser.add_argument("tahun", type=int, required=False, help="Tahun (YYYY)")
+rekap_bulanan_parser.add_argument("id_departemen", type=int, required=False, help="Filter departemen")
+rekap_bulanan_parser.add_argument("id_status_pegawai", type=int, required=False, help="Filter status pegawai")
 
 
 # ======================================================================
@@ -289,4 +296,99 @@ class PresensiManualCreateResource(Resource):
         return success(
             message="Presensi manual berhasil ditambahkan",
             data={"id_absensi": id_absensi}
+        )
+
+
+
+@presensi_ns.route("/rekap-bulanan")
+class PresensiRekapBulananResource(Resource):
+
+    @jwt_required()
+    @role_required("admin")
+    @presensi_ns.expect(rekap_bulanan_parser)
+    @measure_execution_time
+    def get(self):
+        args = rekap_bulanan_parser.parse_args()
+
+        now = get_wita()
+        bulan = args.get("bulan") or now.month
+        tahun = args.get("tahun") or now.year
+        id_departemen = args.get("id_departemen")
+        id_status_pegawai = args.get("id_status_pegawai")
+
+        start_date = date(tahun, bulan, 1)
+        last_day = monthrange(tahun, bulan)[1]
+        end_date = date(tahun, bulan, last_day)
+
+        is_bulan_berjalan = (bulan == now.month and tahun == now.year)
+        today = now.date()
+
+        pegawai_list = get_pegawai_rekap(
+            id_departemen=id_departemen,
+            id_status_pegawai=id_status_pegawai
+        )
+
+        absensi_map = get_absensi_map(start_date, end_date)
+        izin_map = get_izin_map(start_date, end_date)
+        hari_libur = get_hari_libur_map(start_date, end_date)
+
+        hasil = []
+
+        for p in pegawai_list:
+            daily = {}
+            hadir = izin = alpha = 0
+            total_kurang_jam = 0
+
+            current = start_date
+            while current <= end_date:
+                day = str(current.day)
+
+                if is_bulan_berjalan and current > today:
+                    daily[day] = None
+
+                elif current.weekday() == 6 or current in hari_libur:
+                    daily[day] = "L"
+
+                elif current in izin_map.get(p["id_pegawai"], set()):
+                    daily[day] = "I"
+                    izin += 1
+
+                elif current in absensi_map.get(p["id_pegawai"], {}):
+                    daily[day] = "H"
+                    hadir += 1
+
+                    menit_telat = (
+                        absensi_map[p["id_pegawai"]][current].get("menit_terlambat") or 0
+                    )
+                    total_kurang_jam += menit_telat
+
+                else:
+                    daily[day] = "A"
+                    alpha += 1
+
+                current += timedelta(days=1)
+
+            hasil.append({
+                "id_pegawai": p["id_pegawai"],
+                "nama": p["nama_lengkap"],
+                "nama_panggilan": p["nama_panggilan"],
+                "nip": p["nip"],
+                "id_departemen": p["id_departemen"],
+                "nama_departemen": p["nama_departemen"],
+                "id_status_pegawai": p["id_status_pegawai"],
+                "nama_status": p["nama_status"],
+                "hadir": hadir,
+                "izin": izin,
+                "alpha": alpha,
+                "total_kurang_jam": total_kurang_jam,
+                "daily": daily
+            })
+
+        return success(
+            data={
+                "bulan": f"{tahun}-{str(bulan).zfill(2)}",
+                "total_hari": end_date.day,
+                "data": hasil
+            },
+            message="Rekap presensi bulanan"
         )

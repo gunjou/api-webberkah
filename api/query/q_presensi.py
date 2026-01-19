@@ -1,3 +1,4 @@
+from datetime import timedelta
 from sqlalchemy import text
 from api.utils.config import engine
 from api.shared.helper import get_wita
@@ -296,3 +297,95 @@ def insert_absensi_manual(
             "menit_terlambat": menit_terlambat,
             "now": get_wita()
         }).scalar()
+
+
+
+
+def get_pegawai_rekap(id_departemen=None, id_status_pegawai=None):
+    sql = """
+        SELECT
+            p.id_pegawai, p.nip, p.nama_lengkap, nama_panggilan, d.id_departemen, d.nama_departemen, 
+            s.id_status_pegawai, s.nama_status
+        FROM pegawai p
+        LEFT JOIN ref_departemen d
+            ON d.id_departemen = p.id_departemen
+        LEFT JOIN ref_status_pegawai s
+            ON s.id_status_pegawai = p.id_status_pegawai
+        WHERE p.status = 1
+    """
+
+    params = {}
+
+    if id_departemen:
+        sql += " AND p.id_departemen = :id_departemen"
+        params["id_departemen"] = id_departemen
+
+    if id_status_pegawai:
+        sql += " AND p.id_status_pegawai = :id_status_pegawai"
+        params["id_status_pegawai"] = id_status_pegawai
+
+    sql += " ORDER BY p.nama_panggilan ASC"
+
+    with engine.connect() as conn:
+        return conn.execute(text(sql), params).mappings().all()
+
+
+
+def get_absensi_map(start_date, end_date):
+    sql = text("""
+        SELECT
+            id_pegawai,
+            tanggal,
+            menit_terlambat
+        FROM absensi
+        WHERE status = 1
+          AND tanggal BETWEEN :start AND :end
+    """)
+
+    with engine.connect() as conn:
+        rows = conn.execute(sql, {
+            "start": start_date,
+            "end": end_date
+        }).mappings().all()
+
+    result = {}
+    for r in rows:
+        result.setdefault(r["id_pegawai"], {})[r["tanggal"]] = {
+            "menit_terlambat": r["menit_terlambat"]
+        }
+
+    return result
+
+
+
+def get_izin_map(start_date, end_date):
+    sql = text("""
+        SELECT id_pegawai, tgl_mulai, tgl_selesai
+        FROM izin
+        WHERE status = 1
+          AND status_approval = 'approved'
+          AND tgl_selesai >= :start
+          AND tgl_mulai <= :end
+    """)
+
+    data = {}
+    with engine.connect() as conn:
+        for r in conn.execute(sql, {"start": start_date, "end": end_date}):
+            current = r.tgl_mulai
+            while current <= r.tgl_selesai:
+                data.setdefault(r.id_pegawai, set()).add(current)
+                current += timedelta(days=1)
+
+    return data
+
+
+def get_hari_libur_map(start_date, end_date):
+    sql = text("""
+        SELECT tanggal
+        FROM ref_hari_libur
+        WHERE status = 1
+          AND tanggal BETWEEN :start AND :end
+    """)
+
+    with engine.connect() as conn:
+        return {r.tanggal for r in conn.execute(sql, {"start": start_date, "end": end_date})}
