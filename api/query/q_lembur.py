@@ -124,3 +124,142 @@ def soft_delete_lembur(id_lembur: int):
             "id": id_lembur,
             "now": get_wita()
         })
+
+
+
+# ======================================================================
+# QUERY GET LIST LEMBUR BULANAN SEMUA PEGAWAI (ADMIN/LEMBURAN)
+# ======================================================================
+def get_lembur_list(
+    start_date,
+    end_date,
+    status_approval=None,
+    id_departemen=None,
+    id_status_pegawai=None,
+    id_pegawai=None
+):
+    sql = """
+        SELECT
+            l.id_lembur,
+            l.id_pegawai,
+            p.nama_panggilan,
+            p.nip,
+
+            d.nama_departemen,
+
+            sp.id_status_pegawai,
+            sp.nama_status AS status_pegawai,
+
+            l.id_jenis_lembur,
+            jl.nama_jenis,
+
+            l.tanggal,
+            l.jam_mulai,
+            l.jam_selesai,
+            l.menit_lembur,
+            l.total_bayaran,
+            l.status_approval,
+            l.keterangan,
+            l.path_lampiran,
+            l.alasan_penolakan
+
+        FROM lembur l
+        JOIN pegawai p ON p.id_pegawai = l.id_pegawai
+        LEFT JOIN ref_departemen d ON d.id_departemen = p.id_departemen
+        LEFT JOIN ref_status_pegawai sp ON sp.id_status_pegawai = p.id_status_pegawai
+        LEFT JOIN ref_jenis_lembur jl ON jl.id_jenis_lembur = l.id_jenis_lembur
+
+        WHERE l.status = 1
+          AND p.status = 1
+          AND l.tanggal BETWEEN :start_date AND :end_date
+    """
+
+    params = {
+        "start_date": start_date,
+        "end_date": end_date
+    }
+
+    if status_approval:
+        sql += " AND l.status_approval = :status_approval"
+        params["status_approval"] = status_approval
+
+    if id_departemen:
+        sql += " AND p.id_departemen = :id_departemen"
+        params["id_departemen"] = id_departemen
+
+    if id_status_pegawai:
+        sql += " AND p.id_status_pegawai = :id_status_pegawai"
+        params["id_status_pegawai"] = id_status_pegawai
+
+    if id_pegawai:
+        sql += " AND l.id_pegawai = :id_pegawai"
+        params["id_pegawai"] = id_pegawai
+
+    sql += " ORDER BY l.tanggal DESC, l.created_at DESC"
+
+    with engine.connect() as conn:
+        return conn.execute(text(sql), params).mappings().all()
+
+
+
+
+def get_pegawai_with_lembur():
+    """
+    Ambil semua pegawai yang memiliki data lembur (status aktif)
+    """
+
+    sql = text("""
+        SELECT DISTINCT
+            p.id_pegawai,
+            p.nip,
+            p.nama_lengkap,
+            p.nama_panggilan
+        FROM lembur l
+        JOIN pegawai p ON p.id_pegawai = l.id_pegawai
+        WHERE l.status = 1
+          AND p.status = 1
+        ORDER BY p.nama_lengkap ASC
+    """)
+
+    with engine.connect() as conn:
+        return conn.execute(sql).mappings().all()
+
+
+def get_lembur_by_id(id_lembur: int):
+    sql = text("""
+        SELECT
+            id_lembur,
+            status_approval
+        FROM lembur
+        WHERE id_lembur = :id
+          AND status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(
+            sql, {"id": id_lembur}
+        ).mappings().first()
+
+
+def update_lembur_approval(
+    id_lembur: int,
+    status_approval: str,
+    alasan_penolakan: str | None
+):
+    sql = text("""
+        UPDATE lembur
+        SET
+            status_approval = :status_approval,
+            alasan_penolakan = :alasan_penolakan,
+            updated_at = :now
+        WHERE id_lembur = :id
+          AND status = 1
+    """)
+
+    with engine.begin() as conn:
+        conn.execute(sql, {
+            "id": id_lembur,
+            "status_approval": status_approval,
+            "alasan_penolakan": alasan_penolakan,
+            "now": get_wita()
+        })

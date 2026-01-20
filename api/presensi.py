@@ -49,6 +49,10 @@ rekap_bulanan_parser.add_argument("tahun", type=int, required=False, help="Tahun
 rekap_bulanan_parser.add_argument("id_departemen", type=int, required=False, help="Filter departemen")
 rekap_bulanan_parser.add_argument("id_status_pegawai", type=int, required=False, help="Filter status pegawai")
 
+detail_rekap_parser = reqparse.RequestParser()
+detail_rekap_parser.add_argument("bulan", type=int, required=False, help="Bulan (1-12)")
+detail_rekap_parser.add_argument("tahun", type=int, required=False, help="Tahun (YYYY)")
+
 
 # ======================================================================
 # HELPER FUNCTION
@@ -299,7 +303,9 @@ class PresensiManualCreateResource(Resource):
         )
 
 
-
+# ======================================================================
+# ENDPOINT LIHAT KEHADIRAN BULANAN SEMUA PEGAWAI (ADMIN/REKAPAN)
+# ======================================================================
 @presensi_ns.route("/rekap-bulanan")
 class PresensiRekapBulananResource(Resource):
 
@@ -336,7 +342,7 @@ class PresensiRekapBulananResource(Resource):
 
         for p in pegawai_list:
             daily = {}
-            hadir = izin = alpha = 0
+            hadir = izin = sakit = cuti = alpha = 0
             total_kurang_jam = 0
 
             current = start_date
@@ -349,9 +355,18 @@ class PresensiRekapBulananResource(Resource):
                 elif current.weekday() == 6 or current in hari_libur:
                     daily[day] = "L"
 
-                elif current in izin_map.get(p["id_pegawai"], set()):
-                    daily[day] = "I"
-                    izin += 1
+                elif current in izin_map.get(p["id_pegawai"], {}):
+                    kategori = izin_map[p["id_pegawai"]][current]
+
+                    if kategori == "IZIN":
+                        daily[day] = "I"
+                        izin += 1
+                    elif kategori == "SAKIT":
+                        daily[day] = "S"
+                        sakit += 1
+                    elif kategori == "CUTI":
+                        daily[day] = "C"
+                        cuti += 1
 
                 elif current in absensi_map.get(p["id_pegawai"], {}):
                     daily[day] = "H"
@@ -379,6 +394,8 @@ class PresensiRekapBulananResource(Resource):
                 "nama_status": p["nama_status"],
                 "hadir": hadir,
                 "izin": izin,
+                "sakit": sakit,
+                "cuti": cuti,
                 "alpha": alpha,
                 "total_kurang_jam": total_kurang_jam,
                 "daily": daily
@@ -391,4 +408,117 @@ class PresensiRekapBulananResource(Resource):
                 "data": hasil
             },
             message="Rekap presensi bulanan"
+        )
+
+
+
+@presensi_ns.route("/detail-rekap/<int:id_pegawai>")
+class PresensiDetailRekapResource(Resource):
+
+    @jwt_required()
+    @role_required("admin")
+    @presensi_ns.expect(detail_rekap_parser)
+    @measure_execution_time
+    def get(self, id_pegawai):
+        args = detail_rekap_parser.parse_args()
+
+        now = get_wita()
+        bulan = args.get("bulan") or now.month
+        tahun = args.get("tahun") or now.year
+
+        start_date = date(tahun, bulan, 1)
+        last_day = monthrange(tahun, bulan)[1]
+        end_date = date(tahun, bulan, last_day)
+
+        is_bulan_berjalan = (bulan == now.month and tahun == now.year)
+        today = now.date()
+
+        pegawai = get_pegawai_detail_rekap(id_pegawai)
+        if not pegawai:
+            raise ValidationError("Pegawai tidak ditemukan")
+
+        absensi_map = get_absensi_detail_map(id_pegawai, start_date, end_date)
+        izin_map = get_izin_map(start_date, end_date)
+        hari_libur = get_hari_libur_map(start_date, end_date)
+
+        logs = []
+        current = start_date
+
+        while current <= end_date:
+            day = current.day
+            row = absensi_map.get(current)
+
+            if is_bulan_berjalan and current > today:
+                logs.append({
+                    "tanggal_hari": day,
+                    "status": None,
+                    "jam_masuk": None,
+                    "jam_keluar": None,
+                    "istirahat_mulai": None,
+                    "istirahat_selesai": None,
+                    "lokasi_masuk": None,
+                    "lokasi_keluar": None,
+                    "menit_terlambat": 0,
+                    "menit_kurang_jam": 0
+                })
+                current += timedelta(days=1)
+                continue
+
+            if current.weekday() == 6 or current in hari_libur:
+                status = "L"
+            elif current in izin_map.get(id_pegawai, {}):
+                kategori = izin_map[id_pegawai][current]
+                if kategori == "IZIN":
+                    status = "I"
+                elif kategori == "SAKIT":
+                    status = "S"
+                elif kategori == "CUTI":
+                    status = "C"
+                else:
+                    status = "A"
+            elif row:
+                status = "H"
+            else:
+                status = "A"
+
+            logs.append({
+                "tanggal_hari": day,
+                "id_absensi": row["id_absensi"] if row else None,
+                "status": status,
+
+                "jam_masuk": row["jam_masuk"].strftime("%H:%M") if row and row["jam_masuk"] else None,
+                "id_lokasi_masuk": row["id_lokasi_masuk"] if row else None,
+
+                "jam_keluar": row["jam_keluar"].strftime("%H:%M") if row and row["jam_keluar"] else None,
+                "id_lokasi_keluar": row["id_lokasi_keluar"] if row else None,
+
+                "istirahat_mulai": (
+                    row["jam_mulai_istirahat"].strftime("%H:%M")
+                    if row and row["jam_mulai_istirahat"] else None
+                ),
+                "istirahat_selesai": (
+                    row["jam_selesai_istirahat"].strftime("%H:%M")
+                    if row and row["jam_selesai_istirahat"] else None
+                ),
+                "id_lokasi_istirahat": row["id_lokasi_istirahat"] if row else None,
+
+                "menit_terlambat": row["menit_terlambat"] if row else 0,
+                "menit_kurang_jam": (
+                    max(0, (row["jam_per_hari"] - 60) - (row["total_menit_kerja"] or 0))
+                    if row else 0
+                ) # -60 karena jam kerja 480 aktuan 420 
+            })
+
+
+            current += timedelta(days=1)
+
+        return success(
+            message="Detail rekap harian pegawai",
+            data={
+                "id_pegawai": pegawai["id_pegawai"],
+                "nama": pegawai["nama_lengkap"],
+                "nip": pegawai["nip"],
+                "nama_departemen": pegawai["nama_departemen"],
+                "logs": logs
+            }
         )

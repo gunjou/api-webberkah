@@ -360,7 +360,8 @@ def get_absensi_map(start_date, end_date):
 
 def get_izin_map(start_date, end_date):
     sql = text("""
-        SELECT id_pegawai, tgl_mulai, tgl_selesai
+        SELECT
+            id_pegawai, id_jenis_izin, tgl_mulai, tgl_selesai
         FROM izin
         WHERE status = 1
           AND status_approval = 'approved'
@@ -368,15 +369,31 @@ def get_izin_map(start_date, end_date):
           AND tgl_mulai <= :end
     """)
 
-    data = {}
-    with engine.connect() as conn:
-        for r in conn.execute(sql, {"start": start_date, "end": end_date}):
-            current = r.tgl_mulai
-            while current <= r.tgl_selesai:
-                data.setdefault(r.id_pegawai, set()).add(current)
-                current += timedelta(days=1)
+    result = {}
 
-    return data
+    with engine.connect() as conn:
+        rows = conn.execute(sql, {
+            "start": start_date,
+            "end": end_date
+        }).mappings().all()
+
+    for r in rows:
+        # klasifikasi jenis izin
+        if r["id_jenis_izin"] in (1, 2, 6):
+            kategori = "IZIN"
+        elif r["id_jenis_izin"] == 3:
+            kategori = "SAKIT"
+        elif r["id_jenis_izin"] in (4, 5):
+            kategori = "CUTI"
+        else:
+            continue  # abaikan jenis lain
+
+        current = r["tgl_mulai"]
+        while current <= r["tgl_selesai"]:
+            result.setdefault(r["id_pegawai"], {})[current] = kategori
+            current += timedelta(days=1)
+
+    return result
 
 
 def get_hari_libur_map(start_date, end_date):
@@ -389,3 +406,73 @@ def get_hari_libur_map(start_date, end_date):
 
     with engine.connect() as conn:
         return {r.tanggal for r in conn.execute(sql, {"start": start_date, "end": end_date})}
+
+
+
+def get_pegawai_detail_rekap(id_pegawai: int):
+    sql = text("""
+        SELECT
+            p.id_pegawai,
+            p.nip,
+            p.nama_lengkap,
+            d.nama_departemen
+        FROM pegawai p
+        LEFT JOIN ref_departemen d ON d.id_departemen = p.id_departemen
+        WHERE p.id_pegawai = :id
+          AND p.status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql, {"id": id_pegawai}).mappings().first()
+
+def get_absensi_detail_map(id_pegawai: int, start_date, end_date):
+    sql = text("""
+        SELECT
+            a.id_absensi,
+            a.tanggal,
+            a.jam_masuk,
+            a.jam_keluar,
+            a.total_menit_kerja,
+            a.menit_terlambat,
+
+            a.id_lokasi_masuk,
+            a.id_lokasi_keluar,
+
+            jk.jam_per_hari,
+
+            MIN(ai.jam_mulai) AS jam_mulai_istirahat,
+            MAX(ai.jam_selesai) AS jam_selesai_istirahat,
+            MAX(ai.id_lokasi_balik) AS id_lokasi_istirahat
+
+        FROM absensi a
+        JOIN ref_jam_kerja jk ON jk.id_jam_kerja = a.id_jam_kerja
+        LEFT JOIN absensi_istirahat ai
+            ON ai.id_absensi = a.id_absensi
+           AND ai.status = 1
+        WHERE a.id_pegawai = :id_pegawai
+          AND a.tanggal BETWEEN :start_date AND :end_date
+          AND a.status = 1
+        GROUP BY
+            a.id_absensi,
+            a.tanggal,
+            a.jam_masuk,
+            a.jam_keluar,
+            a.total_menit_kerja,
+            a.menit_terlambat,
+            a.id_lokasi_masuk,
+            a.id_lokasi_keluar,
+            jk.jam_per_hari
+    """)
+
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sql,
+            {
+                "id_pegawai": id_pegawai,
+                "start_date": start_date,
+                "end_date": end_date
+            }
+        ).mappings().all()
+
+    return {r["tanggal"]: r for r in rows}
+
