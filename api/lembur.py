@@ -41,6 +41,10 @@ lembur_reject_parser = reqparse.RequestParser()
 lembur_reject_parser.add_argument("alasan_penolakan", type=str, required=True, help="Alasan penolakan lembur")
 
 
+
+# ======================================================================
+# ENDPOINT PENGAJUAN LEMBUR OLEH PEGAWAI (PEGAWAI/LEMBURAN)
+# ======================================================================
 @lembur_ns.route("/pengajuan-lembur")
 class PengajuanLemburResource(Resource):
 
@@ -94,6 +98,9 @@ class PengajuanLemburResource(Resource):
         )
 
 
+# ======================================================================
+# ENDPOINT LEMBURAN AKTIF OLEH PEGAWAI (PEGAWAI/LEMBURAN)
+# ======================================================================
 @lembur_ns.route("/aktif")
 class LemburAktifHarianResource(Resource):
 
@@ -145,6 +152,9 @@ class LemburAktifHarianResource(Resource):
         )
 
 
+# ======================================================================
+# ENDPOINT HISTORY LEMBURAN OLEH PEGAWAI (PEGAWAI/LEMBURAN)
+# ======================================================================
 @lembur_ns.route("/history")
 class LemburHistoryBulananResource(Resource):
 
@@ -194,7 +204,9 @@ class LemburHistoryBulananResource(Resource):
         )
 
 
-
+# ======================================================================
+# ENDPOINT DELETE LEMBUR OLEH PEGAWAI (PEGAWAI/LEMBURAN)
+# ======================================================================
 @lembur_ns.route("/<int:id_lembur>")
 class LemburDeleteResource(Resource):
 
@@ -293,33 +305,9 @@ class LemburListResource(Resource):
             ]
         )
 
-
-
-@lembur_ns.route("/<int:id_lembur>/approved")
-class LemburApproveResource(Resource):
-
-    @jwt_required()
-    @role_required("admin")
-    @measure_execution_time
-    def put(self, id_lembur):
-        """(admin) Approve lembur"""
-
-        lembur = get_lembur_by_id(id_lembur)
-        if not lembur:
-            raise ValidationError("Data lembur tidak ditemukan")
-
-        if lembur["status_approval"] == "approved":
-            raise ValidationError("Lembur sudah di-approve")
-
-        update_lembur_approval(
-            id_lembur=id_lembur,
-            status_approval="approved",
-            alasan_penolakan=None
-        )
-
-        return success(message="Lembur berhasil di-approve")
-
-
+# =========================================================================
+# ENDPOINT PEGAWAI PUNYA LEMBUR UNTUK FILTER NAMA (ADMIN/LEMBURAN)
+# =========================================================================
 @lembur_ns.route("/pegawai")
 class PegawaiDenganLemburResource(Resource):
 
@@ -344,6 +332,34 @@ class PegawaiDenganLemburResource(Resource):
             ],
             meta={"total": len(rows)}
         )
+
+
+# ======================================================================
+# ENDPOINT APPROVE/REJECT LEMBURAN PEGAWAI OLEH ADMIN (ADMIN/LEMBURAN)
+# ======================================================================
+@lembur_ns.route("/<int:id_lembur>/approved")
+class LemburApproveResource(Resource):
+
+    @jwt_required()
+    @role_required("admin")
+    @measure_execution_time
+    def put(self, id_lembur):
+        """(admin) Approve lembur"""
+
+        lembur = get_lembur_by_id(id_lembur)
+        if not lembur:
+            raise ValidationError("Data lembur tidak ditemukan")
+
+        if lembur["status_approval"] == "approved":
+            raise ValidationError("Lembur sudah di-approve")
+
+        update_lembur_approval(
+            id_lembur=id_lembur,
+            status_approval="approved",
+            alasan_penolakan=None
+        )
+
+        return success(message="Lembur berhasil di-approve")
 
 
 @lembur_ns.route("/<int:id_lembur>/rejected")

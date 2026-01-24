@@ -4,6 +4,29 @@ from api.shared.helper import get_wita
 
 
 
+# ======================================================================
+# QUERY HELPER
+# ======================================================================
+def get_lembur_by_id(id_lembur: int):
+    sql = text("""
+        SELECT
+            id_lembur,
+            id_pegawai,
+            status_approval,
+            status
+        FROM lembur
+        WHERE id_lembur = :id
+          AND status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql, {"id": id_lembur}).mappings().first()
+    
+
+
+# ======================================================================
+# QUERY PENGAJUAN LEMBUR OLEH PEGAWAI (PEGAWAI/LEMBURAN)
+# ======================================================================
 def insert_pengajuan_lembur(
     id_pegawai: int,
     id_jenis_lembur: int,
@@ -40,6 +63,9 @@ def insert_pengajuan_lembur(
             } ).scalar()
 
 
+# ======================================================================
+# QUERY LEMBURAN AKTIF OLEH PEGAWAI (PEGAWAI/LEMBURAN)
+# ======================================================================
 def get_lembur_aktif_harian(id_pegawai: int, tanggal):
     """
     Ambil lembur aktif pegawai di hari tertentu
@@ -67,6 +93,9 @@ def get_lembur_aktif_harian(id_pegawai: int, tanggal):
         ).mappings().all()
 
 
+# ======================================================================
+# QUERY HISTORY LEMBURAN OLEH PEGAWAI (PEGAWAI/LEMBURAN)
+# ======================================================================
 def get_history_lembur_bulanan(id_pegawai: int, bulan: int, tahun: int):
     """
     Ambil history lembur pegawai per bulan
@@ -95,22 +124,9 @@ def get_history_lembur_bulanan(id_pegawai: int, bulan: int, tahun: int):
         ).mappings().all()
 
 
-def get_lembur_by_id(id_lembur: int):
-    sql = text("""
-        SELECT
-            id_lembur,
-            id_pegawai,
-            status_approval,
-            status
-        FROM lembur
-        WHERE id_lembur = :id
-          AND status = 1
-        LIMIT 1
-    """)
-    with engine.connect() as conn:
-        return conn.execute(sql, {"id": id_lembur}).mappings().first()
-
-
+# ======================================================================
+# QUERY DELETE LEMBUR OLEH PEGAWAI (PEGAWAI/LEMBURAN)
+# ======================================================================
 def soft_delete_lembur(id_lembur: int):
     sql = text("""
         UPDATE lembur
@@ -202,7 +218,9 @@ def get_lembur_list(
 
 
 
-
+# ======================================================================
+# QUERY PEGAWAI PUNYA LEMBUR UNTUK FILTER NAMA (ADMIN/LEMBURAN)
+# ======================================================================
 def get_pegawai_with_lembur():
     """
     Ambil semua pegawai yang memiliki data lembur (status aktif)
@@ -225,22 +243,9 @@ def get_pegawai_with_lembur():
         return conn.execute(sql).mappings().all()
 
 
-def get_lembur_by_id(id_lembur: int):
-    sql = text("""
-        SELECT
-            id_lembur,
-            status_approval
-        FROM lembur
-        WHERE id_lembur = :id
-          AND status = 1
-        LIMIT 1
-    """)
-    with engine.connect() as conn:
-        return conn.execute(
-            sql, {"id": id_lembur}
-        ).mappings().first()
-
-
+# ======================================================================
+# QUERY APPROVE/REJECT LEMBURAN PEGAWAI OLEH ADMIN (ADMIN/LEMBURAN)
+# ======================================================================
 def update_lembur_approval(
     id_lembur: int,
     status_approval: str,
