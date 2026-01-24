@@ -227,6 +227,26 @@ def get_izin_list(
 
 
 # ======================================================================
+# QUERY PEGAWAI PUNYA IZIN UNTUK FILTER NAMA (ADMIN/WEBBERKAH)
+# ======================================================================
+def get_pegawai_with_izin():
+    """
+    Ambil semua pegawai yang memiliki data izin (status aktif)
+    """
+    sql = text("""
+        SELECT DISTINCT
+            p.id_pegawai, p.nip, p.nama_lengkap, p.nama_panggilan
+        FROM izin i
+        JOIN pegawai p ON p.id_pegawai = i.id_pegawai
+        WHERE i.status = 1
+          AND p.status = 1
+        ORDER BY p.nama_lengkap ASC
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql).mappings().all()
+    
+    
+# ======================================================================
 # QUERY APPROVE/REJECT IZIN OLEH ADMIN (ADMIN/WEBBERKAH)
 # ======================================================================
 def get_izin_by_id(id_izin: int):

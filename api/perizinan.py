@@ -311,6 +311,35 @@ class IzinListResource(Resource):
         )
 
 
+# =========================================================================
+# ENDPOINT PEGAWAI PUNYA IZIN UNTUK FILTER NAMA (ADMIN/WEBBERKAH)
+# =========================================================================
+@perizinan_ns.route("/pegawai")
+class PegawaiDenganIzinResource(Resource):
+
+    @jwt_required()
+    @role_required("admin")
+    @measure_execution_time
+    def get(self):
+        """(admin) List pegawai yang memiliki izin"""
+
+        rows = get_pegawai_with_izin()
+
+        return success(
+            message="List pegawai dengan izin",
+            data=[
+                {
+                    "id_pegawai": r["id_pegawai"],
+                    "nip": r["nip"],
+                    "nama_lengkap": r["nama_lengkap"],
+                    "nama_panggilan": r["nama_panggilan"]
+                }
+                for r in rows
+            ],
+            meta={"total": len(rows)}
+        )
+
+
 # ======================================================================
 # ENDPOINT APPROVE/REJECT IZIN OLEH ADMIN (ADMIN/WEBBERKAH)
 # ======================================================================
