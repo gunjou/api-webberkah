@@ -93,7 +93,7 @@ def get_all_pegawai_core():
         LEFT JOIN auth_pegawai ap ON ap.id_pegawai = p.id_pegawai AND ap.status = 1
 
         WHERE p.status = 1
-        ORDER BY p.tanggal_masuk ASC, p.id_pegawai ASC
+        ORDER BY p.nama_lengkap ASC, p.id_pegawai ASC
     """)
 
     with engine.connect() as conn:
@@ -174,7 +174,7 @@ def get_pegawai_profile():
             ON pr.id_pegawai = p.id_pegawai
            AND pr.status = 1
         WHERE p.status = 1
-        ORDER BY p.tanggal_masuk ASC, p.id_pegawai ASC
+        ORDER BY p.nama_lengkap ASC, p.id_pegawai ASC
     """)
     with engine.connect() as conn:
         return conn.execute(sql).mappings().all()
@@ -195,7 +195,7 @@ def get_pegawai_rekening():
             ON r.id_pegawai = p.id_pegawai
            AND r.status = 1
         WHERE p.status = 1
-        ORDER BY p.tanggal_masuk ASC, p.id_pegawai ASC
+        ORDER BY p.nama_lengkap ASC, p.id_pegawai ASC
     """)
     with engine.connect() as conn:
         return conn.execute(sql).mappings().all()
@@ -216,7 +216,7 @@ def get_pegawai_pendidikan():
             ON pd.id_pegawai = p.id_pegawai
            AND pd.status = 1
         WHERE p.status = 1
-        ORDER BY p.tanggal_masuk ASC, p.id_pegawai ASC
+        ORDER BY p.nama_lengkap ASC, p.id_pegawai ASC
     """)
     with engine.connect() as conn:
         return conn.execute(sql).mappings().all()
@@ -236,7 +236,7 @@ def get_pegawai_akun():
         LEFT JOIN auth_pegawai ap
             ON ap.id_pegawai = p.id_pegawai
         WHERE p.status = 1
-        ORDER BY p.tanggal_masuk ASC, p.id_pegawai ASC
+        ORDER BY p.nama_lengkap ASC, p.id_pegawai ASC
     """)
     with engine.connect() as conn:
         return conn.execute(sql).mappings().all()
@@ -260,7 +260,7 @@ def get_pegawai_lokasi():
             ON la.id_lokasi = pla.id_lokasi
            AND la.status = 1
         WHERE p.status = 1
-        ORDER BY p.tanggal_masuk ASC, p.id_pegawai ASC
+        ORDER BY p.nama_lengkap ASC, p.id_pegawai ASC
     """)
     with engine.connect() as conn:
         return conn.execute(sql).mappings().all()

@@ -1,7 +1,7 @@
 from calendar import monthrange
 from flask_restx import Namespace, Resource, reqparse
 from flask_jwt_extended import jwt_required
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from api.query.q_master import get_jam_kerja_by_id
 from api.shared.response import success
@@ -60,11 +60,17 @@ detail_rekap_parser.add_argument("tahun", type=int, required=False, help="Tahun 
 def parse_time(value):
     if not value:
         return None
-    try:
-        return datetime.strptime(value, "%H:%M").time()
-    except ValueError:
-        raise ValidationError("Format waktu harus HH:MM")
 
+    if isinstance(value, time):
+        return value
+
+    if isinstance(value, str):
+        try:
+            return datetime.strptime(value, "%H:%M").time()
+        except ValueError:
+            raise ValidationError("Format waktu harus HH:MM")
+
+    raise ValidationError("Format waktu tidak valid")
 
 
 # ======================================================================
@@ -260,7 +266,8 @@ class PresensiManualCreateResource(Resource):
             raise ValidationError("Pegawai tidak ditemukan atau tidak aktif")
 
         # 2️⃣ Cek absensi existing
-        if is_absensi_exist(args["id_pegawai"], tanggal):
+        existing = get_absensi_existing(args["id_pegawai"], tanggal)
+        if existing and existing["status"] == 1:
             raise ValidationError("Absensi pada tanggal ini sudah ada")
 
         # 3️⃣ Ambil jam kerja
@@ -273,17 +280,32 @@ class PresensiManualCreateResource(Resource):
             jam_kerja["jam_mulai"]
         )
 
-        # 4️⃣ INSERT absensi
-        id_absensi = insert_absensi_manual(
-            id_pegawai=args["id_pegawai"],
-            tanggal=tanggal,
-            id_jam_kerja=args["id_jam_kerja"],
-            jam_masuk=jam_masuk,
-            jam_keluar=jam_keluar,
-            id_lokasi_masuk=args["id_lokasi_masuk"],
-            id_lokasi_keluar=args.get("id_lokasi_keluar"),
-            menit_terlambat=menit_terlambat
-        )
+        if existing and existing["status"] == 0:
+            # 🔁 revive data lama
+            id_absensi = existing["id_absensi"]
+            deactivate_istirahat_by_absensi(id_absensi)
+
+            revive_absensi_manual(
+                id_absensi=id_absensi,
+                id_jam_kerja=args["id_jam_kerja"],
+                jam_masuk=jam_masuk,
+                jam_keluar=jam_keluar,
+                id_lokasi_masuk=args["id_lokasi_masuk"],
+                id_lokasi_keluar=args.get("id_lokasi_keluar"),
+                menit_terlambat=menit_terlambat
+            )
+        else:
+            # 4️⃣ INSERT absensi
+            id_absensi = insert_absensi_manual(
+                id_pegawai=args["id_pegawai"],
+                tanggal=tanggal,
+                id_jam_kerja=args["id_jam_kerja"],
+                jam_masuk=jam_masuk,
+                jam_keluar=jam_keluar,
+                id_lokasi_masuk=args["id_lokasi_masuk"],
+                id_lokasi_keluar=args.get("id_lokasi_keluar"),
+                menit_terlambat=menit_terlambat
+            )
 
         # 5️⃣ UPSERT istirahat (opsional)
         if ist_mulai or ist_selesai:
@@ -412,6 +434,9 @@ class PresensiRekapBulananResource(Resource):
 
 
 
+# ======================================================================
+# ENDPOINT DETAIL REKAPAN BULANAN PER PEGAWAI (ADMIN/REKAPAN)
+# ======================================================================
 @presensi_ns.route("/detail-rekap/<int:id_pegawai>")
 class PresensiDetailRekapResource(Resource):
 

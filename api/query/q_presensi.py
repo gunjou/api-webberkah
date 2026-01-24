@@ -123,6 +123,7 @@ def upsert_absensi_istirahat(id_absensi: int, jam_mulai=None, jam_selesai=None, 
                 jam_selesai = :jam_selesai,
                 id_lokasi_balik = :id_lokasi_balik,
                 durasi_menit = :durasi_menit,
+                status = 1,
                 updated_at = :now
             WHERE id_istirahat = :id
         """)
@@ -251,18 +252,21 @@ def is_pegawai_active(id_pegawai):
     with engine.connect() as conn:
         return conn.execute(sql, {"id": id_pegawai}).first() is not None
 
-def is_absensi_exist(id_pegawai, tanggal):
+
+def get_absensi_existing(id_pegawai, tanggal):
     sql = text("""
-        SELECT 1 FROM absensi
+        SELECT id_absensi, status
+        FROM absensi
         WHERE id_pegawai = :id
           AND tanggal = :tanggal
-          AND status = 1
+        LIMIT 1
     """)
     with engine.connect() as conn:
         return conn.execute(sql, {
             "id": id_pegawai,
             "tanggal": tanggal
-        }).first() is not None
+        }).mappings().first()
+
 
 def insert_absensi_manual(
     id_pegawai,
@@ -299,8 +303,60 @@ def insert_absensi_manual(
         }).scalar()
 
 
+def deactivate_istirahat_by_absensi(id_absensi):
+    sql = text("""
+        UPDATE absensi_istirahat
+        SET status = 0, updated_at = :now
+        WHERE id_absensi = :id_absensi
+          AND status = 1
+    """)
+    with engine.begin() as conn:
+        conn.execute(sql, {
+            "id_absensi": id_absensi,
+            "now": get_wita()
+        })
 
 
+def revive_absensi_manual(
+    id_absensi,
+    id_jam_kerja,
+    jam_masuk,
+    jam_keluar,
+    id_lokasi_masuk,
+    id_lokasi_keluar,
+    menit_terlambat
+):
+    sql = text("""
+        UPDATE absensi
+        SET
+            id_jam_kerja = :id_jam_kerja,
+            jam_masuk = :jam_masuk,
+            jam_keluar = :jam_keluar,
+            id_lokasi_masuk = :id_lokasi_masuk,
+            id_lokasi_keluar = :id_lokasi_keluar,
+            menit_terlambat = :menit_terlambat,
+            status = 1,
+            updated_at = :now
+        WHERE id_absensi = :id_absensi
+    """)
+
+    with engine.begin() as conn:
+        conn.execute(sql, {
+            "id_absensi": id_absensi,
+            "id_jam_kerja": id_jam_kerja,
+            "jam_masuk": jam_masuk,
+            "jam_keluar": jam_keluar,
+            "id_lokasi_masuk": id_lokasi_masuk,
+            "id_lokasi_keluar": id_lokasi_keluar,
+            "menit_terlambat": menit_terlambat,
+            "now": get_wita()
+        })
+
+
+
+# ======================================================================
+# ENDPOINT LIHAT KEHADIRAN BULANAN SEMUA PEGAWAI (ADMIN/REKAPAN)
+# ======================================================================
 def get_pegawai_rekap(id_departemen=None, id_status_pegawai=None):
     sql = """
         SELECT
@@ -357,7 +413,6 @@ def get_absensi_map(start_date, end_date):
     return result
 
 
-
 def get_izin_map(start_date, end_date):
     sql = text("""
         SELECT
@@ -409,6 +464,9 @@ def get_hari_libur_map(start_date, end_date):
 
 
 
+# ======================================================================
+# QUERY DETAIL REKAPAN BULANAN PER PEGAWAI (ADMIN/REKAPAN)
+# ======================================================================
 def get_pegawai_detail_rekap(id_pegawai: int):
     sql = text("""
         SELECT
