@@ -40,6 +40,23 @@ lembur_list_parser.add_argument("id_pegawai", type=int, required=False, location
 lembur_reject_parser = reqparse.RequestParser()
 lembur_reject_parser.add_argument("alasan_penolakan", type=str, required=True, help="Alasan penolakan lembur")
 
+lembur_admin_parser = reqparse.RequestParser()
+lembur_admin_parser.add_argument("id_pegawai", type=int, required=True, location="form", help="Pegawai yang dilemburkan")
+lembur_admin_parser.add_argument("id_jenis_lembur", type=int, required=True, location="form", help="Jenis lembur")
+lembur_admin_parser.add_argument("tanggal", type=str, required=True, location="form", help="Tanggal lembur (YYYY-MM-DD)")
+lembur_admin_parser.add_argument("jam_mulai", type=str, required=True, location="form", help="Jam mulai lembur (HH:MM)")
+lembur_admin_parser.add_argument("jam_selesai", type=str, required=True, location="form", help="Jam selesai lembur (HH:MM)")
+lembur_admin_parser.add_argument("keterangan", type=str, required=False, location="form")
+lembur_admin_parser.add_argument("lampiran", type=FileStorage, required=False, location="files")
+
+lembur_edit_parser = reqparse.RequestParser()
+lembur_edit_parser.add_argument("id_jenis_lembur", type=int, required=False, location="form")
+lembur_edit_parser.add_argument("tanggal", type=str, required=False, location="form")
+lembur_edit_parser.add_argument("jam_mulai", type=str, required=False, location="form")
+lembur_edit_parser.add_argument("jam_selesai", type=str, required=False, location="form")
+lembur_edit_parser.add_argument("keterangan", type=str, required=False, location="form")
+lembur_edit_parser.add_argument("lampiran", type=FileStorage, required=False, location="files")
+
 
 
 # ======================================================================
@@ -215,26 +232,89 @@ class LemburDeleteResource(Resource):
     def delete(self, id_lembur):
         """(pegawai/admin) Soft delete lembur"""
 
-        id_pegawai = int(get_jwt_identity())
         jwt_data = get_jwt()
         account_type = jwt_data.get("account_type")
+        id_user = int(get_jwt_identity())
 
         lembur = get_lembur_by_id(id_lembur)
         if not lembur:
             raise ValidationError("Data lembur tidak ditemukan")
 
-        # 🔐 validasi kepemilikan
-        if account_type == "pegawai" and lembur["id_pegawai"] != id_pegawai:
-            raise ValidationError("Anda tidak berhak menghapus lembur ini")
+        if account_type == "pegawai":
+            if lembur["id_pegawai"] != id_user:
+                raise ValidationError("Anda tidak berhak menghapus izin ini")
 
-        # (opsional) cegah hapus jika sudah diproses
-        if lembur["status_approval"] in ("approved", "rejected"):
-            raise ValidationError("Lembur yang sudah diproses tidak dapat dihapus")
+            if lembur["status_approval"] in ("approved", "rejected"):
+                raise ValidationError("Izin yang sudah diproses tidak dapat dihapus")
+
+        elif account_type == "admin":
+            pass
+
+        else:
+            raise ValidationError("Role tidak dikenali")
 
         soft_delete_lembur(id_lembur)
 
         return success(
             message="Pengajuan lembur berhasil dihapus (soft delete)"
+        )
+
+
+
+# ======================================================================
+# ENDPOINT TAMBAHKAN LEMBUR OLEH ADMIN (ADMIN/LEMBURAN)
+# ======================================================================
+@lembur_ns.route("/admin/pengajuan-lembur")
+class LemburAdminCreateResource(Resource):
+
+    @jwt_required()
+    @role_required("admin")
+    @lembur_ns.expect(lembur_admin_parser)
+    @measure_execution_time
+    def post(self):
+        """(admin) Tambah lembur pegawai secara manual"""
+
+        args = lembur_admin_parser.parse_args()
+
+        try:
+            tanggal = datetime.strptime(args["tanggal"], "%Y-%m-%d").date()
+            jam_mulai = datetime.strptime(args["jam_mulai"], "%H:%M").time()
+            jam_selesai = datetime.strptime(args["jam_selesai"], "%H:%M").time()
+        except ValueError:
+            raise ValidationError("Format tanggal atau jam tidak valid")
+
+        if jam_selesai <= jam_mulai:
+            raise ValidationError("Jam selesai harus lebih besar dari jam mulai")
+
+        menit_lembur = int(
+            (
+                datetime.combine(tanggal, jam_selesai)
+                - datetime.combine(tanggal, jam_mulai)
+            ).total_seconds() / 60
+        )
+
+        lampiran_url = None
+        if args.get("lampiran"):
+            lampiran_url = upload_lampiran_izin_to_cdn(args["lampiran"])
+
+        id_lembur = insert_pengajuan_lembur(
+            id_pegawai=args["id_pegawai"],     # ⬅️ beda di sini
+            id_jenis_lembur=args["id_jenis_lembur"],
+            tanggal=tanggal,
+            jam_mulai=jam_mulai,
+            jam_selesai=jam_selesai,
+            menit_lembur=menit_lembur,
+            keterangan=args.get("keterangan"),
+            path_lampiran=lampiran_url
+        )
+
+        return success(
+            message="Pengajuan lembur pegawai berhasil ditambahkan",
+            data={
+                "id_lembur": id_lembur,
+                "id_pegawai": args["id_pegawai"],
+                "status_approval": "pending"
+            }
         )
 
 
@@ -263,8 +343,8 @@ class LemburListResource(Resource):
         end_date = date(tahun, bulan, last_day)
 
         # bulan berjalan → sampai hari ini
-        if bulan == now.month and tahun == now.year:
-            end_date = now.date()
+        # if bulan == now.month and tahun == now.year:
+        #     end_date = now.date()
 
         rows = get_lembur_list(
             start_date=start_date,
@@ -304,6 +384,74 @@ class LemburListResource(Resource):
                 for r in rows
             ]
         )
+
+
+
+# =========================================================================
+# ENDPOINT UPDATE LEMBUR OLEH ADMIN (ADMIN/WEBBERKAH)
+# =========================================================================
+@lembur_ns.route("/admin/<int:id_lembur>")
+class LemburUpdateResource(Resource):
+
+    @jwt_required()
+    @role_required("admin")
+    @lembur_ns.expect(lembur_edit_parser)
+    @measure_execution_time
+    def put(self, id_lembur):
+        """(admin) Edit data lembur pegawai"""
+
+        args = lembur_edit_parser.parse_args()
+
+        lembur = get_lembur_by_id(id_lembur)
+        if not lembur:
+            raise ValidationError("Data lembur tidak ditemukan")
+
+        # Parsing tanggal & jam (jika ada)
+        tanggal = lembur["tanggal"]
+        jam_mulai = lembur["jam_mulai"]
+        jam_selesai = lembur["jam_selesai"]
+
+        try:
+            if args.get("tanggal"):
+                tanggal = datetime.strptime(args["tanggal"], "%Y-%m-%d").date()
+            if args.get("jam_mulai"):
+                jam_mulai = datetime.strptime(args["jam_mulai"], "%H:%M").time()
+            if args.get("jam_selesai"):
+                jam_selesai = datetime.strptime(args["jam_selesai"], "%H:%M").time()
+        except ValueError:
+            raise ValidationError("Format tanggal / jam tidak valid")
+
+        if jam_selesai and jam_mulai and jam_selesai <= jam_mulai:
+            raise ValidationError("Jam selesai harus lebih besar dari jam mulai")
+
+        menit_lembur = None
+        if jam_mulai and jam_selesai:
+            menit_lembur = int(
+                (
+                    datetime.combine(tanggal, jam_selesai)
+                    - datetime.combine(tanggal, jam_mulai)
+                ).total_seconds() / 60
+            )
+
+        # Upload lampiran jika ada
+        path_lampiran = lembur["path_lampiran"]
+        if args.get("lampiran"):
+            path_lampiran = upload_lampiran_izin_to_cdn(args["lampiran"])
+
+        update_lembur_admin(
+            id_lembur=id_lembur,
+            id_jenis_lembur=args.get("id_jenis_lembur"),
+            tanggal=tanggal,
+            jam_mulai=jam_mulai,
+            jam_selesai=jam_selesai,
+            menit_lembur=menit_lembur,
+            keterangan=args.get("keterangan"),
+            path_lampiran=path_lampiran
+        )
+
+        return success(message="Data lembur berhasil diperbarui")
+
+
 
 # =========================================================================
 # ENDPOINT PEGAWAI PUNYA LEMBUR UNTUK FILTER NAMA (ADMIN/LEMBURAN)

@@ -44,6 +44,21 @@ izin_list_parser.add_argument("kategori_izin", type=str, required=False, choices
 izin_reject_parser = reqparse.RequestParser()
 izin_reject_parser.add_argument("alasan_penolakan", type=str, required=True, help="Alasan penolakan perizinan")
 
+izin_admin_parser = reqparse.RequestParser()
+izin_admin_parser.add_argument("id_pegawai", type=int, required=True, location="form", help="Pegawai wajib diisi")
+izin_admin_parser.add_argument("id_jenis_izin", type=int, required=True, location="form", help="Jenis izin wajib diisi")
+izin_admin_parser.add_argument("tanggal_mulai", type=str, required=True, location="form", help="Tanggal mulai izin (YYYY-MM-DD)")
+izin_admin_parser.add_argument("tanggal_selesai", type=str, required=True, location="form", help="Tanggal selesai izin (YYYY-MM-DD)")
+izin_admin_parser.add_argument("alasan", type=str, required=True, location="form", help="Keterangan / alasan izin")
+izin_admin_parser.add_argument("lampiran", type=FileStorage, required=False, location="files")
+
+izin_edit_parser = reqparse.RequestParser()
+izin_edit_parser.add_argument("id_jenis_izin", type=int, required=True, location="form", help="Jenis izin")
+izin_edit_parser.add_argument("tanggal_mulai", type=str, required=True, location="form", help="Tanggal mulai (YYYY-MM-DD)")
+izin_edit_parser.add_argument("tanggal_selesai", type=str, required=True, location="form", help="Tanggal selesai (YYYY-MM-DD)")
+izin_edit_parser.add_argument("alasan", type=str, required=True, location="form", help="Keterangan izin")
+izin_edit_parser.add_argument("lampiran", type=FileStorage, required=False, location="files")
+
 
 
 # ======================================================================
@@ -220,26 +235,91 @@ class IzinDeleteResource(Resource):
     def delete(self, id_izin):
         """(pegawai/admin) Soft delete pengajuan izin"""
 
-        id_pegawai = int(get_jwt_identity())
         jwt_data = get_jwt()
         account_type = jwt_data.get("account_type")
+        id_user = int(get_jwt_identity())
 
         izin = get_izin_by_id(id_izin)
         if not izin:
             raise ValidationError("Data izin tidak ditemukan")
 
-        # validasi kepemilikan (jika pegawai)
-        if account_type == "pegawai" and izin["id_pegawai"] != id_pegawai:
-            raise ValidationError("Anda tidak berhak menghapus izin ini")
+        if account_type == "pegawai":
+            if izin["id_pegawai"] != id_user:
+                raise ValidationError("Anda tidak berhak menghapus izin ini")
 
-        # tidak boleh hapus izin yang sudah diproses
-        if izin["status_approval"] in ("approved", "rejected"):
-            raise ValidationError("Izin yang sudah diproses tidak dapat dihapus")
+            if izin["status_approval"] in ("approved", "rejected"):
+                raise ValidationError("Izin yang sudah diproses tidak dapat dihapus")
+
+        elif account_type == "admin":
+            pass
+
+        else:
+            raise ValidationError("Role tidak dikenali")
 
         soft_delete_izin(id_izin)
 
         return success(
             message="Pengajuan izin berhasil dihapus (soft delete)"
+        )
+
+
+
+# ======================================================================
+# ENDPOINT TAMBAHKAN IZIN OLEH ADMIN (ADMIN/WEBBERKAH)
+# ======================================================================
+@perizinan_ns.route("/admin/pengajuan-izin")
+class AjukanIzinAdminResource(Resource):
+
+    @jwt_required()
+    @role_required("admin")
+    @perizinan_ns.expect(izin_admin_parser)
+    @measure_execution_time
+    def post(self):
+        """(admin) Ajukan izin pegawai (manual oleh admin)"""
+
+        args = izin_admin_parser.parse_args()
+
+        id_pegawai = args["id_pegawai"]
+        id_jenis_izin = args["id_jenis_izin"]
+        alasan = args["alasan"]
+        file = args.get("lampiran")
+
+        # Validasi tanggal
+        try:
+            tgl_mulai = datetime.strptime(
+                args["tanggal_mulai"], "%Y-%m-%d"
+            ).date()
+            tgl_selesai = datetime.strptime(
+                args["tanggal_selesai"], "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            raise ValidationError("Format tanggal harus YYYY-MM-DD")
+
+        if tgl_selesai < tgl_mulai:
+            raise ValidationError("Tanggal selesai tidak boleh lebih kecil dari tanggal mulai")
+
+        # Upload lampiran (optional)
+        path_lampiran = None
+        if file:
+            path_lampiran = upload_lampiran_izin_to_cdn(file)
+
+        # Insert izin
+        id_izin = insert_pengajuan_izin(
+            id_pegawai=id_pegawai,
+            id_jenis_izin=id_jenis_izin,
+            tgl_mulai=tgl_mulai,
+            tgl_selesai=tgl_selesai,
+            keterangan=alasan,
+            path_lampiran=path_lampiran
+        )
+
+        return success(
+            message="Pengajuan izin oleh admin berhasil",
+            data={
+                "id_izin": id_izin,
+                "id_pegawai": id_pegawai,
+                "status": "pending"
+            }
         )
 
 
@@ -268,8 +348,8 @@ class IzinListResource(Resource):
         end_date = date(tahun, bulan, last_day)
 
         # bulan berjalan → sampai hari ini
-        if bulan == now.month and tahun == now.year:
-            end_date = now.date()
+        # if bulan == now.month and tahun == now.year:
+        #     end_date = now.date()
 
         rows = get_izin_list(
             start_date=start_date,
@@ -309,6 +389,63 @@ class IzinListResource(Resource):
                 for r in rows
             ]
         )
+
+
+# =========================================================================
+# ENDPOINT UPDATE IZIN OLEH ADMIN (ADMIN/WEBBERKAH)
+# =========================================================================
+@perizinan_ns.route("/admin/<int:id_izin>")
+class EditIzinAdminResource(Resource):
+
+    @jwt_required()
+    @role_required("admin")
+    @perizinan_ns.expect(izin_edit_parser)
+    @measure_execution_time
+    def put(self, id_izin):
+        """(admin) Edit data perizinan pegawai"""
+
+        args = izin_edit_parser.parse_args()
+
+        izin = get_izin_by_id(id_izin)
+        if not izin:
+            raise ValidationError("Data izin tidak ditemukan")
+
+        # Validasi tanggal
+        try:
+            tgl_mulai = datetime.strptime(
+                args["tanggal_mulai"], "%Y-%m-%d"
+            ).date()
+            tgl_selesai = datetime.strptime(
+                args["tanggal_selesai"], "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            raise ValidationError("Format tanggal harus YYYY-MM-DD")
+
+        if tgl_selesai < tgl_mulai:
+            raise ValidationError("Tanggal selesai tidak boleh lebih kecil dari tanggal mulai")
+
+        # Upload lampiran (opsional)
+        path_lampiran = izin["path_lampiran"]
+        if args.get("lampiran"):
+            path_lampiran = upload_lampiran_izin_to_cdn(args["lampiran"])
+
+        # Update izin
+        update_izin_admin(
+            id_izin=id_izin,
+            id_jenis_izin=args["id_jenis_izin"],
+            tgl_mulai=tgl_mulai,
+            tgl_selesai=tgl_selesai,
+            keterangan=args["alasan"],
+            path_lampiran=path_lampiran
+        )
+
+        return success(
+            message="Data izin berhasil diperbarui",
+            data={
+                "id_izin": id_izin
+            }
+        )
+
 
 
 # =========================================================================

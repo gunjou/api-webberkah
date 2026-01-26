@@ -9,19 +9,17 @@ from api.shared.helper import get_wita
 # ======================================================================
 def get_lembur_by_id(id_lembur: int):
     sql = text("""
-        SELECT
-            id_lembur,
-            id_pegawai,
-            status_approval,
-            status
+        SELECT *
         FROM lembur
         WHERE id_lembur = :id
           AND status = 1
         LIMIT 1
     """)
     with engine.connect() as conn:
-        return conn.execute(sql, {"id": id_lembur}).mappings().first()
-    
+        return conn.execute(
+            sql, {"id": id_lembur}
+        ).mappings().first()
+
 
 
 # ======================================================================
@@ -215,6 +213,52 @@ def get_lembur_list(
 
     with engine.connect() as conn:
         return conn.execute(text(sql), params).mappings().all()
+
+
+
+# ======================================================================
+# QUERY UPDATE LEMBUR OLEH ADMIN (ADMIN/WEBBERKAH)
+# ======================================================================
+def update_lembur_admin(
+    id_lembur: int,
+    id_jenis_lembur: int,
+    tanggal,
+    jam_mulai,
+    jam_selesai,
+    menit_lembur: int,
+    keterangan: str,
+    path_lampiran: str | None
+):
+    sql = text("""
+        UPDATE lembur
+        SET
+            id_jenis_lembur = :id_jenis_lembur,
+            tanggal = :tanggal,
+            jam_mulai = :jam_mulai,
+            jam_selesai = :jam_selesai,
+            menit_lembur = :menit_lembur,
+            keterangan = :keterangan,
+            path_lampiran = :path_lampiran,
+            updated_at = :now
+        WHERE id_lembur = :id_lembur
+          AND status = 1
+    """)
+
+    with engine.begin() as conn:
+        conn.execute(
+            sql,
+            {
+                "id_lembur": id_lembur,
+                "id_jenis_lembur": id_jenis_lembur,
+                "tanggal": tanggal,
+                "jam_mulai": jam_mulai,
+                "jam_selesai": jam_selesai,
+                "menit_lembur": menit_lembur,
+                "keterangan": keterangan,
+                "path_lampiran": path_lampiran,
+                "now": get_wita()
+            }
+        )
 
 
 

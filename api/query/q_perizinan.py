@@ -8,11 +8,7 @@ from api.shared.helper import get_wita
 # ======================================================================
 def get_izin_by_id(id_izin: int):
     sql = text("""
-        SELECT
-            id_izin,
-            id_pegawai,
-            status_approval,
-            status
+        SELECT *
         FROM izin
         WHERE id_izin = :id
           AND status = 1
@@ -20,6 +16,7 @@ def get_izin_by_id(id_izin: int):
     """)
     with engine.connect() as conn:
         return conn.execute(sql, {"id": id_izin}).mappings().first()
+    
 
 
 # ======================================================================
@@ -226,6 +223,45 @@ def get_izin_list(
 
     with engine.connect() as conn:
         return conn.execute(text(sql), params).mappings().all()
+
+
+
+# ======================================================================
+# QUERY UPDATE IZIN OLEH ADMIN (ADMIN/WEBBERKAH)
+# ======================================================================
+def update_izin_admin(
+    id_izin: int,
+    id_jenis_izin: int,
+    tgl_mulai,
+    tgl_selesai,
+    keterangan: str,
+    path_lampiran: str | None
+):
+    sql = text("""
+        UPDATE izin
+        SET
+            id_jenis_izin = :id_jenis_izin,
+            tgl_mulai = :tgl_mulai,
+            tgl_selesai = :tgl_selesai,
+            keterangan = :keterangan,
+            path_lampiran = :path_lampiran,
+            updated_at = :now
+        WHERE id_izin = :id_izin
+    """)
+
+    with engine.begin() as conn:
+        conn.execute(
+            sql,
+            {
+                "id_izin": id_izin,
+                "id_jenis_izin": id_jenis_izin,
+                "tgl_mulai": tgl_mulai,
+                "tgl_selesai": tgl_selesai,
+                "keterangan": keterangan,
+                "path_lampiran": path_lampiran,
+                "now": get_wita()
+            }
+        )
 
 
 
