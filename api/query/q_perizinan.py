@@ -3,6 +3,24 @@ from api.utils.config import engine
 from api.shared.helper import get_wita
 
 
+# ======================================================================
+# QUERY HELPER
+# ======================================================================
+def get_izin_by_id(id_izin: int):
+    sql = text("""
+        SELECT
+            id_izin,
+            id_pegawai,
+            status_approval,
+            status
+        FROM izin
+        WHERE id_izin = :id
+          AND status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql, {"id": id_izin}).mappings().first()
+
 
 # ======================================================================
 # QUERY PENGAJUAN IZIN OLEH PEGAWAI (PEGAWAI/WEBBERKAH)
@@ -104,21 +122,6 @@ def get_history_izin_bulanan(
 # ======================================================================
 # QUERY DELETE IZIN OLEH ADMIN & PEGAWAI 
 # ======================================================================
-def get_izin_by_id(id_izin: int):
-    sql = text("""
-        SELECT
-            id_izin,
-            id_pegawai,
-            status_approval,
-            status
-        FROM izin
-        WHERE id_izin = :id
-          AND status = 1
-        LIMIT 1
-    """)
-    with engine.connect() as conn:
-        return conn.execute(sql, {"id": id_izin}).mappings().first()
-
 def soft_delete_izin(id_izin: int):
     sql = text("""
         UPDATE izin
@@ -249,21 +252,6 @@ def get_pegawai_with_izin():
 # ======================================================================
 # QUERY APPROVE/REJECT IZIN OLEH ADMIN (ADMIN/WEBBERKAH)
 # ======================================================================
-def get_izin_by_id(id_izin: int):
-    sql = text("""
-        SELECT
-            id_izin, status_approval
-        FROM izin
-        WHERE id_izin = :id
-          AND status = 1
-        LIMIT 1
-    """)
-    with engine.connect() as conn:
-        return conn.execute(
-            sql, {"id": id_izin}
-        ).mappings().first()
-
-
 def update_izin_approval(
     id_izin: int,
     status_approval: str,
