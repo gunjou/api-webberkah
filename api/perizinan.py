@@ -12,7 +12,7 @@ from api.utils.uploader import upload_lampiran_izin_to_cdn
 from api.query.q_perizinan import *
 
 
-perizinan_ns = Namespace("perizinan", description="Pengajuan Izin Pegawai")
+perizinan_ns = Namespace("perizinan", description="Manajeman Izin Pegawai")
 
 
 # ======================================================================

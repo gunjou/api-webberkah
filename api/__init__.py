@@ -20,6 +20,7 @@ from api.perizinan import perizinan_ns
 from api.presensi import presensi_ns
 from api.lembur import lembur_ns
 from api.dashboard import dashboard_ns
+from api.hutang import hutang_ns
 
 app = Flask(__name__)
 CORS(app)
@@ -75,6 +76,7 @@ api.add_namespace(perizinan_ns, path="/perizinan")
 api.add_namespace(presensi_ns, path="/presensi")
 api.add_namespace(lembur_ns, path="/lembur")
 api.add_namespace(dashboard_ns, path="/dashboard")
+api.add_namespace(hutang_ns, path="/hutang")
 
 
 # ==============================

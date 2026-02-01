@@ -50,10 +50,10 @@ lembur_admin_parser.add_argument("keterangan", type=str, required=False, locatio
 lembur_admin_parser.add_argument("lampiran", type=FileStorage, required=False, location="files")
 
 lembur_edit_parser = reqparse.RequestParser()
-lembur_edit_parser.add_argument("id_jenis_lembur", type=int, required=False, location="form")
-lembur_edit_parser.add_argument("tanggal", type=str, required=False, location="form")
-lembur_edit_parser.add_argument("jam_mulai", type=str, required=False, location="form")
-lembur_edit_parser.add_argument("jam_selesai", type=str, required=False, location="form")
+lembur_edit_parser.add_argument("id_jenis_lembur", type=int, required=False, location="form", help="Jenis lembur")
+lembur_edit_parser.add_argument("tanggal", type=str, required=False, location="form", help="Tanggal lembur (YYYY-MM-DD)")
+lembur_edit_parser.add_argument("jam_mulai", type=str, required=False, location="form", help="Jam mulai lembur (HH:MM)")
+lembur_edit_parser.add_argument("jam_selesai", type=str, required=False, location="form", help="Jam selesai lembur (HH:MM)")
 lembur_edit_parser.add_argument("keterangan", type=str, required=False, location="form")
 lembur_edit_parser.add_argument("lampiran", type=FileStorage, required=False, location="files")
 
