@@ -1,3 +1,4 @@
+from decimal import Decimal
 from sqlalchemy import text
 from api.utils.config import engine
 from api.shared.helper import get_wita
@@ -312,3 +313,145 @@ def update_lembur_approval(
             "alasan_penolakan": alasan_penolakan,
             "now": get_wita()
         })
+
+
+def get_gaji_dan_tunjangan_pegawai(id_pegawai: int):
+    """
+    Ambil gaji pokok + tunjangan pendapatan (tetap/harian)
+    """
+    sql = text("""
+        SELECT
+            pg.gaji_pokok,
+            k.kode,
+            k.nama_komponen,
+            k.metode_hitung,
+            pgk.nilai
+        FROM pegawai_gaji pg
+        LEFT JOIN pegawai_gaji_komponen pgk
+            ON pgk.id_pegawai = pg.id_pegawai
+            AND pgk.status = 1
+        LEFT JOIN ref_komponen_gaji k
+            ON k.id_komponen = pgk.id_komponen
+            AND k.status = 1
+            AND k.tipe = 'pendapatan'
+            AND k.metode_hitung IN ('tetap', 'harian')
+            AND k.kode <> 'GAPOK'
+        WHERE pg.id_pegawai = :id_pegawai
+        AND pg.status = 1
+    """)
+
+    with engine.connect() as conn:
+        return conn.execute(
+            sql, {"id_pegawai": id_pegawai}
+        ).mappings().all()
+
+def hitung_upah_per_jam(
+    gaji_rows,
+    id_status_pegawai,
+    hari_kerja: int
+):
+    """
+    Hitung upah per jam dari:
+    gaji pokok + tunjangan (non GAPOK)
+    """
+    gaji_pokok = Decimal("0")
+    total_tunjangan = Decimal("0")
+
+    for r in gaji_rows:
+        if r["gaji_pokok"]:
+            gaji_pokok = r["gaji_pokok"]
+
+        if r["nilai"]:
+            total_tunjangan += r["nilai"]
+
+    total_bulanan = gaji_pokok + total_tunjangan
+
+    # pegawai tetap & magang → gaji bulanan
+    if id_status_pegawai in (1, 5):
+        upah_harian = total_bulanan / Decimal(26)
+    else:
+        # pegawai tidak tetap → gaji sudah harian
+        upah_harian = total_bulanan
+
+    upah_per_jam = upah_harian / Decimal(8)
+
+    return upah_harian, upah_per_jam, total_bulanan
+
+
+
+def get_lembur_rekap_raw(start_date, end_date, id_departemen=None, id_pegawai=None):
+    sql = """
+        SELECT
+            l.id_lembur,
+            l.id_pegawai,
+            p.nama_panggilan,
+            p.nip,
+            p.id_status_pegawai,
+            l.id_jenis_lembur,
+            l.tanggal,
+            l.menit_lembur,
+            pg.gaji_pokok
+        FROM lembur l
+        JOIN pegawai p ON p.id_pegawai = l.id_pegawai
+        JOIN pegawai_gaji pg ON pg.id_pegawai = p.id_pegawai
+        WHERE l.status = 1
+          AND p.status = 1
+          AND l.status_approval = 'approved'
+          AND l.tanggal BETWEEN :start_date AND :end_date
+    """
+
+    params = {
+        "start_date": start_date,
+        "end_date": end_date
+    }
+
+    if id_departemen:
+        sql += " AND p.id_departemen = :id_departemen"
+        params["id_departemen"] = id_departemen
+
+    if id_pegawai:
+        sql += " AND p.id_pegawai = :id_pegawai"
+        params["id_pegawai"] = id_pegawai
+
+    sql += " ORDER BY l.tanggal DESC"
+
+    with engine.connect() as conn:
+        return conn.execute(text(sql), params).mappings().all()
+
+
+def get_lembur_rekap_summary_raw(
+    start_date,
+    end_date,
+    id_departemen=None
+):
+    sql = """
+        SELECT
+            l.id_lembur,
+            l.id_pegawai,
+            p.nama_panggilan,
+            p.nip,
+            p.id_status_pegawai,
+            l.id_jenis_lembur,
+            l.tanggal,
+            l.menit_lembur
+        FROM lembur l
+        JOIN pegawai p ON p.id_pegawai = l.id_pegawai
+        WHERE l.status = 1
+          AND p.status = 1
+          AND l.status_approval = 'approved'
+          AND l.tanggal BETWEEN :start_date AND :end_date
+    """
+
+    params = {
+        "start_date": start_date,
+        "end_date": end_date
+    }
+
+    if id_departemen:
+        sql += " AND p.id_departemen = :id_departemen"
+        params["id_departemen"] = id_departemen
+
+    sql += " ORDER BY l.tanggal DESC"
+
+    with engine.connect() as conn:
+        return conn.execute(text(sql), params).mappings().all()

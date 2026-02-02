@@ -74,6 +74,26 @@ hari_libur_model = master_ns.model("HariLibur", {
     }
 )
 
+komponen_gaji_model = master_ns.model("KomponenGaji", {
+        "kode": fields.String(required=True, description="Kode komponen gaji", example="T_TRP"),
+        "nama_komponen": fields.String(required=True, description="Nama komponen gaji", example="Tunjangan Transport"),
+        "tipe": fields.String(required=True, description="Tipe komponen", example="pendapatan"),
+        "metode_hitung": fields.String(required=True, description="Metode perhitungan", example="per_hari_hadir")
+    }
+)
+
+pegawai_gaji_model = master_ns.model("PegawaiGaji", {
+        "id_pegawai": fields.Integer( required=True, description="ID pegawai", example=1),
+        "gaji_pokok": fields.Float( required=True, description="Gaji pokok (bulanan atau harian tergantung status pegawai)", example=5000000)
+    }
+)
+
+pegawai_gaji_komponen_model = master_ns.model("PegawaiGajiKomponen", {
+    "id_pegawai": fields.Integer(required=True, description="ID pegawai", example=1),
+    "id_komponen": fields.Integer(required=True, description="ID komponen gaji", example=2),
+    "nilai": fields.Float(required=True, description="Nilai komponen gaji", example=250000)
+})
+
 
 
 # ==================================================
@@ -893,3 +913,216 @@ class HariLiburDetailResource(Resource):
             raise NotFoundError("Hari libur tidak ditemukan")
 
         return success(message="Hari libur berhasil dihapus")
+
+
+
+# ==================================================
+# REF KOMPONEN GAJI
+# ==================================================
+@master_ns.route("/komponen-gaji")
+class KomponenGajiListResource(Resource):
+
+    @jwt_required()
+    @measure_execution_time
+    def get(self):
+        data = get_komponen_gaji_list()
+        return success(data=data, message="List komponen gaji")
+
+    @role_required('admin')
+    @master_ns.expect(komponen_gaji_model, validate=True)
+    @measure_execution_time
+    def post(self):
+        body = request.get_json(silent=True) or {}
+
+        data = create_komponen_gaji(
+            body["kode"],
+            body["nama_komponen"],
+            body["tipe"],
+            body["metode_hitung"]
+        )
+        return success(data=data, message="Komponen gaji berhasil ditambahkan")
+
+
+@master_ns.route("/komponen-gaji/<int:id_komponen>")
+class KomponenGajiDetailResource(Resource):
+
+    @jwt_required()
+    @measure_execution_time
+    def get(self, id_komponen):
+        """Akses: (admin, pegawai), Detail komponen gaji"""
+        data = get_komponen_gaji_by_id(id_komponen)
+        if not data:
+            raise NotFoundError("Komponen gaji tidak ditemukan")
+        return success(data=data, message="Detail komponen gaji")
+
+    @role_required('admin')
+    @master_ns.expect(komponen_gaji_model, validate=True)
+    @measure_execution_time
+    def put(self, id_komponen):
+        """Akses: (admin), Update komponen gaji"""
+        body = request.get_json(silent=True) or {}
+
+        data = update_komponen_gaji(
+            id_komponen=id_komponen,
+            kode=body.get("kode"),
+            nama_komponen=body.get("nama_komponen"),
+            tipe=body.get("tipe"),
+            metode_hitung=body.get("metode_hitung")
+        )
+
+        if not data:
+            raise NotFoundError("Komponen gaji tidak ditemukan")
+
+        return success(data=data, message="Komponen gaji berhasil diperbarui")
+
+    @role_required('admin')
+    @measure_execution_time
+    def delete(self, id_komponen):
+        """Akses: (admin), Delete komponen gaji"""
+        deleted = delete_komponen_gaji(id_komponen)
+        if deleted == 0:
+            raise NotFoundError("Komponen gaji tidak ditemukan")
+
+        return success(message="Komponen gaji berhasil dihapus")
+
+
+
+# ==================================================
+# REF GAJI PEGAWAI
+# ==================================================
+@master_ns.route("/pegawai-gaji")
+class PegawaiGajiListResource(Resource):
+
+    @role_required('admin')
+    @measure_execution_time
+    def get(self):
+        """Akses: (admin), List master gaji pegawai"""
+        data = get_pegawai_gaji_list()
+        return success(data=data, message="List gaji pegawai")
+
+    @role_required('admin')
+    @master_ns.expect(pegawai_gaji_model, validate=True)
+    @measure_execution_time
+    def post(self):
+        """Akses: (admin), Set gaji pegawai"""
+        body = request.get_json(silent=True) or {}
+
+        data = create_pegawai_gaji(
+            id_pegawai=body.get("id_pegawai"),
+            gaji_pokok=body.get("gaji_pokok")
+        )
+
+        return success(data=data, message="Gaji pegawai berhasil disimpan")
+
+
+@master_ns.route("/pegawai-gaji/<int:id_pegawai>")
+class PegawaiGajiDetailResource(Resource):
+
+    @role_required('admin')
+    @measure_execution_time
+    def get(self, id_pegawai):
+        """Akses: (admin), Detail gaji pegawai"""
+        data = get_pegawai_gaji_by_pegawai(id_pegawai)
+        if not data:
+            raise NotFoundError("Gaji pegawai belum diset")
+        return success(data=data, message="Detail gaji pegawai")
+
+    @role_required('admin')
+    @master_ns.expect(pegawai_gaji_model, validate=True)
+    @measure_execution_time
+    def put(self, id_pegawai):
+        """Akses: (admin), Update gaji pegawai"""
+        body = request.get_json(silent=True) or {}
+
+        data = update_pegawai_gaji(
+            id_pegawai=id_pegawai,
+            gaji_pokok=body.get("gaji_pokok")
+        )
+
+        if not data:
+            raise NotFoundError("Gaji pegawai belum diset")
+
+        return success(data=data, message="Gaji pegawai berhasil diperbarui")
+
+    @role_required('admin')
+    @measure_execution_time
+    def delete(self, id_pegawai):
+        """Akses: (admin), Delete gaji pegawai"""
+        deleted = delete_pegawai_gaji(id_pegawai)
+        if deleted == 0:
+            raise NotFoundError("Gaji pegawai belum diset")
+
+        return success(message="Gaji pegawai berhasil dihapus")
+
+
+
+# ==================================================
+# REF PEGAWAI GAJI KOMPONEN
+# ==================================================
+@master_ns.route("/pegawai-gaji-komponen")
+class PegawaiGajiKomponenListResource(Resource):
+
+    @role_required('admin')
+    @measure_execution_time
+    def get(self):
+        """Akses: (admin), List semua komponen gaji pegawai"""
+        data = get_pegawai_gaji_komponen_list()
+        return success(data=data, message="List komponen gaji pegawai")
+
+    @role_required('admin')
+    @master_ns.expect(pegawai_gaji_komponen_model, validate=True)
+    @measure_execution_time
+    def post(self):
+        """Akses: (admin), Tambah komponen gaji pegawai"""
+        body = request.get_json(silent=True) or {}
+
+        data = create_pegawai_gaji_komponen(
+            id_pegawai=body.get("id_pegawai"),
+            id_komponen=body.get("id_komponen"),
+            nilai=body.get("nilai")
+        )
+
+        return success(data=data, message="Komponen gaji pegawai berhasil ditambahkan")
+
+
+@master_ns.route("/pegawai-gaji-komponen/pegawai/<int:id_pegawai>")
+class PegawaiGajiKomponenByPegawaiResource(Resource):
+
+    @role_required('admin')
+    @measure_execution_time
+    def get(self, id_pegawai):
+        """Akses: (admin), List komponen gaji pegawai tertentu"""
+        data = get_pegawai_gaji_komponen_by_pegawai(id_pegawai)
+        return success(data=data, message="List komponen gaji pegawai")
+
+
+@master_ns.route("/pegawai-gaji-komponen/<int:id>")
+class PegawaiGajiKomponenDetailResource(Resource):
+
+    @role_required('admin')
+    @master_ns.expect(pegawai_gaji_komponen_model, validate=True)
+    @measure_execution_time
+    def put(self, id):
+        """Akses: (admin), Update komponen gaji pegawai"""
+        body = request.get_json(silent=True) or {}
+
+        data = update_pegawai_gaji_komponen(
+            id=id,
+            nilai=body.get("nilai")
+        )
+
+        if not data:
+            raise NotFoundError("Komponen gaji pegawai tidak ditemukan")
+
+        return success(data=data, message="Komponen gaji pegawai berhasil diperbarui")
+
+    @role_required('admin')
+    @measure_execution_time
+    def delete(self, id):
+        """Akses: (admin), Delete komponen gaji pegawai"""
+        deleted = delete_pegawai_gaji_komponen(id)
+        if deleted == 0:
+            raise NotFoundError("Komponen gaji pegawai tidak ditemukan")
+
+        return success(message="Komponen gaji pegawai berhasil dihapus")
+

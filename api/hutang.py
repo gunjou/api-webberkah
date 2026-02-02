@@ -37,6 +37,10 @@ hutang_bayar_parser.add_argument("tanggal", type=str, required=True, help="Tangg
 hutang_bayar_parser.add_argument("metode", type=str, choices=("kas", "transfer", "potong_gaji"), default="potong_gaji")
 hutang_bayar_parser.add_argument("keterangan", type=str, required=True, help="Keterangan pembayaran")
 
+hutang_transaksi_bulanan_parser = reqparse.RequestParser()
+hutang_transaksi_bulanan_parser.add_argument("bulan", type=int, required=True, help="Bulan (1-12)")
+hutang_transaksi_bulanan_parser.add_argument("tahun", type=int, required=True, help="Tahun (YYYY)")
+
 
 @hutang_ns.route("")
 class HutangSummaryResource(Resource):
@@ -293,5 +297,47 @@ class HutangPembayaranResource(Resource):
                 "id_pegawai": args["id_pegawai"],
                 "total_dibayar": total_terbayar,
                 "tanggal": tanggal.isoformat()
+            }
+        )
+    
+    
+    @jwt_required()
+    @role_required("admin")
+    @hutang_ns.expect(hutang_transaksi_bulanan_parser)
+    @measure_execution_time
+    def get(self):
+        """(admin) Ambil transaksi pembayaran hutang per bulan"""
+
+        args = hutang_transaksi_bulanan_parser.parse_args()
+        bulan = args["bulan"]
+        tahun = args["tahun"]
+
+        if bulan < 1 or bulan > 12:
+            raise ValidationError("Bulan harus antara 1 - 12")
+
+        rows = get_transaksi_pembayaran_hutang_bulanan(
+            bulan=bulan,
+            tahun=tahun
+        )
+
+        return success(
+            message="Data transaksi pembayaran hutang",
+            data=[
+                {
+                    "id_transaksi": r["id_transaksi"],
+                    "id_hutang": r["id_hutang"],
+                    "id_pegawai": r["id_pegawai"],
+                    "nama_lengkap": r["nama_lengkap"],
+                    "tanggal": r["tanggal"].isoformat(),
+                    "jumlah": float(r["jumlah"]),
+                    "metode": r["metode"],
+                    "keterangan": r["keterangan"]
+                }
+                for r in rows
+            ],
+            meta={
+                "bulan": bulan,
+                "tahun": tahun,
+                "total": len(rows)
             }
         )

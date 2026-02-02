@@ -857,3 +857,291 @@ def delete_hari_libur(id_libur: int):
             "now": get_wita()
         })
         return result.rowcount
+
+
+
+# ==================================================
+# REF KOMPONEN GAJI
+# ==================================================
+
+def get_komponen_gaji_list():
+    sql = text("""
+        SELECT
+            id_komponen, kode, nama_komponen, tipe, metode_hitung, status, created_at
+        FROM ref_komponen_gaji
+        WHERE status = 1
+        ORDER BY id_komponen ASC
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql).mappings().all()
+
+
+def get_komponen_gaji_by_id(id_komponen: int):
+    sql = text("""
+        SELECT
+            id_komponen, kode, nama_komponen, tipe, metode_hitung, status, created_at
+        FROM ref_komponen_gaji
+        WHERE id_komponen = :id
+          AND status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql, {"id": id_komponen}).mappings().first()
+
+
+def create_komponen_gaji(kode, nama_komponen, tipe, metode_hitung):
+    sql = text("""
+        INSERT INTO ref_komponen_gaji
+            (kode, nama_komponen, tipe, metode_hitung)
+        VALUES
+            (:kode, :nama, :tipe, :metode)
+        RETURNING
+            id_komponen, kode, nama_komponen, tipe, metode_hitung, status, created_at
+    """)
+    with engine.begin() as conn:
+        return conn.execute(sql, {
+            "kode": kode,
+            "nama": nama_komponen,
+            "tipe": tipe,
+            "metode": metode_hitung
+        }).mappings().first()
+
+
+def update_komponen_gaji(id_komponen, kode, nama_komponen, tipe, metode_hitung):
+    sql = text("""
+        UPDATE ref_komponen_gaji
+        SET
+            kode = :kode,
+            nama_komponen = :nama,
+            tipe = :tipe,
+            metode_hitung = :metode,
+            updated_at = :now
+        WHERE id_komponen = :id
+          AND status = 1
+        RETURNING
+            id_komponen, kode, nama_komponen, tipe, metode_hitung, status, created_at, updated_at
+    """)
+    with engine.begin() as conn:
+        return conn.execute(sql, {
+            "id": id_komponen,
+            "kode": kode,
+            "nama": nama_komponen,
+            "tipe": tipe,
+            "metode": metode_hitung,
+            "now": get_wita()
+        }).mappings().first()
+
+
+def delete_komponen_gaji(id_komponen):
+    sql = text("""
+        UPDATE ref_komponen_gaji
+        SET
+            status = 0,
+            updated_at = :now
+        WHERE id_komponen = :id
+          AND status = 1
+    """)
+    with engine.begin() as conn:
+        result = conn.execute(sql, {
+            "id": id_komponen,
+            "now": get_wita()
+        })
+        return result.rowcount
+
+
+
+# ==================================================
+# PEGAWAI GAJI
+# ==================================================
+
+def get_pegawai_gaji_list():
+    sql = text("""
+        SELECT
+            pg.id, pg.id_pegawai, p.nama_lengkap, pg.gaji_pokok, pg.status, pg.created_at, pg.updated_at
+        FROM pegawai_gaji pg
+        JOIN pegawai p ON p.id_pegawai = pg.id_pegawai
+        WHERE pg.status = 1 AND p.status = 1
+        ORDER BY pg.id_pegawai ASC
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql).mappings().all()
+
+
+def get_pegawai_gaji_by_pegawai(id_pegawai: int):
+    sql = text("""
+        SELECT
+            id, id_pegawai, gaji_pokok, status, created_at, updated_at
+        FROM pegawai_gaji
+        WHERE id_pegawai = :id_pegawai
+          AND status = 1
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        return conn.execute(
+            sql, {"id_pegawai": id_pegawai}
+        ).mappings().first()
+
+
+def create_pegawai_gaji(id_pegawai: int, gaji_pokok):
+    sql = text("""
+        INSERT INTO pegawai_gaji (id_pegawai, gaji_pokok)
+        VALUES (:id_pegawai, :gaji_pokok)
+        RETURNING
+            id, id_pegawai, gaji_pokok, status, created_at, updated_at
+    """)
+    with engine.begin() as conn:
+        return conn.execute(sql, {
+            "id_pegawai": id_pegawai,
+            "gaji_pokok": gaji_pokok
+        }).mappings().first()
+
+
+def update_pegawai_gaji(id_pegawai: int, gaji_pokok):
+    sql = text("""
+        UPDATE pegawai_gaji
+        SET
+            gaji_pokok = :gaji_pokok,
+            updated_at = :now
+        WHERE id_pegawai = :id_pegawai
+          AND status = 1
+        RETURNING
+            id, id_pegawai, gaji_pokok, status, created_at, updated_at
+    """)
+    with engine.begin() as conn:
+        return conn.execute(sql, {
+            "id_pegawai": id_pegawai,
+            "gaji_pokok": gaji_pokok,
+            "now": get_wita()
+        }).mappings().first()
+
+
+def delete_pegawai_gaji(id_pegawai: int):
+    sql = text("""
+        UPDATE pegawai_gaji
+        SET
+            status = 0,
+            updated_at = :now
+        WHERE id_pegawai = :id_pegawai
+          AND status = 1
+    """)
+    with engine.begin() as conn:
+        result = conn.execute(sql, {
+            "id_pegawai": id_pegawai,
+            "now": get_wita()
+        })
+        return result.rowcount
+
+
+
+# ==================================================
+# PEGAWAI GAJI KOMPONEN
+# ==================================================
+
+def get_pegawai_gaji_komponen_list():
+    sql = text("""
+        SELECT
+            pgk.id,
+            pgk.id_pegawai,
+            p.nama_lengkap,
+            pgk.id_komponen,
+            rk.kode AS kode_komponen,
+            rk.nama_komponen,
+            pgk.nilai,
+            pgk.status,
+            pgk.created_at
+        FROM pegawai_gaji_komponen pgk
+        JOIN pegawai p ON p.id_pegawai = pgk.id_pegawai
+        JOIN ref_komponen_gaji rk ON rk.id_komponen = pgk.id_komponen
+        WHERE pgk.status = 1 AND p.status = 1
+        ORDER BY pgk.id_pegawai, rk.kode
+    """)
+    with engine.connect() as conn:
+        return conn.execute(sql).mappings().all()
+
+
+def get_pegawai_gaji_komponen_by_pegawai(id_pegawai: int):
+    sql = text("""
+        SELECT
+            pgk.id,
+            pgk.id_pegawai,
+            pgk.id_komponen,
+            rk.kode AS kode_komponen,
+            rk.nama_komponen,
+            rk.metode_hitung,
+            pgk.nilai,
+            pgk.status,
+            pgk.created_at
+        FROM pegawai_gaji_komponen pgk
+        JOIN ref_komponen_gaji rk ON rk.id_komponen = pgk.id_komponen
+        WHERE pgk.id_pegawai = :id_pegawai
+          AND pgk.status = 1
+        ORDER BY rk.kode
+    """)
+    with engine.connect() as conn:
+        return conn.execute(
+            sql, {"id_pegawai": id_pegawai}
+        ).mappings().all()
+
+
+def create_pegawai_gaji_komponen(id_pegawai: int, id_komponen: int, nilai):
+    sql = text("""
+        INSERT INTO pegawai_gaji_komponen
+            (id_pegawai, id_komponen, nilai)
+        VALUES
+            (:id_pegawai, :id_komponen, :nilai)
+        RETURNING
+            id,
+            id_pegawai,
+            id_komponen,
+            nilai,
+            status,
+            created_at
+    """)
+    with engine.begin() as conn:
+        return conn.execute(sql, {
+            "id_pegawai": id_pegawai,
+            "id_komponen": id_komponen,
+            "nilai": nilai
+        }).mappings().first()
+
+
+def update_pegawai_gaji_komponen(id: int, nilai):
+    sql = text("""
+        UPDATE pegawai_gaji_komponen
+        SET
+            nilai = :nilai,
+            updated_at = :now
+        WHERE id = :id
+          AND status = 1
+        RETURNING
+            id,
+            id_pegawai,
+            id_komponen,
+            nilai,
+            status,
+            created_at,
+            updated_at
+    """)
+    with engine.begin() as conn:
+        return conn.execute(sql, {
+            "id": id,
+            "nilai": nilai,
+            "now": get_wita()
+        }).mappings().first()
+
+
+def delete_pegawai_gaji_komponen(id: int):
+    sql = text("""
+        UPDATE pegawai_gaji_komponen
+        SET
+            status = 0,
+            updated_at = :now
+        WHERE id = :id
+          AND status = 1
+    """)
+    with engine.begin() as conn:
+        result = conn.execute(sql, {
+            "id": id,
+            "now": get_wita()
+        })
+        return result.rowcount

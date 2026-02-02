@@ -1,9 +1,12 @@
 from calendar import monthrange
+from decimal import Decimal
 from flask_restx import Namespace, Resource, reqparse
 from flask_jwt_extended import get_jwt, jwt_required, get_jwt_identity
 from werkzeug.datastructures import FileStorage
 from datetime import datetime, date, time
 
+from api.query.q_payroll import count_hari_kerja
+from api.query.q_presensi import get_hari_libur_map
 from api.shared.response import success
 from api.shared.exceptions import ValidationError
 from api.utils.decorator import measure_execution_time, role_required
@@ -537,3 +540,202 @@ class LemburRejectResource(Resource):
         )
 
         return success(message="Lembur berhasil ditolak")
+
+
+
+@lembur_ns.route("/rekap")
+class LemburRekapResource(Resource):
+
+    @jwt_required()
+    @role_required("admin")
+    @lembur_ns.expect(lembur_list_parser)
+    @measure_execution_time
+    def get(self):
+        """(admin) Rekap lembur pegawai"""
+
+        args = lembur_list_parser.parse_args()
+
+        now = get_wita()
+        bulan = args.get("bulan") or now.month
+        tahun = args.get("tahun") or now.year
+
+        start_date = date(tahun, bulan, 1)
+        end_date = date(tahun, bulan, monthrange(tahun, bulan)[1])
+
+        hari_libur_map = get_hari_libur_map(start_date, end_date)
+        hari_kerja = count_hari_kerja(start_date, end_date)
+
+        rows = get_lembur_rekap_raw(
+            start_date=start_date,
+            end_date=end_date,
+            id_departemen=args.get("id_departemen"),
+            id_pegawai=args.get("id_pegawai")
+        )
+
+        data = []
+
+        # 🔹 CACHE GAJI PER PEGAWAI
+        gaji_cache = {}
+
+        for r in rows:
+            id_pegawai = r["id_pegawai"]
+            tanggal = r["tanggal"]
+
+            # ===== LIBUR =====
+            is_minggu = tanggal.weekday() == 6
+            is_libur = is_minggu or tanggal in hari_libur_map
+
+            # ===== AMBIL GAJI (CACHE) =====
+            if id_pegawai not in gaji_cache:
+                gaji_rows = get_gaji_dan_tunjangan_pegawai(id_pegawai)
+                upah_harian, upah_per_jam, total_bulanan = hitung_upah_per_jam(
+                    gaji_rows=gaji_rows,
+                    id_status_pegawai=r["id_status_pegawai"],
+                    hari_kerja=hari_kerja
+                )
+                gaji_cache[id_pegawai] = {
+                    "upah_harian": upah_harian,
+                    "upah_per_jam": upah_per_jam
+                }
+
+            upah_per_jam = gaji_cache[id_pegawai]["upah_per_jam"]
+
+            # ===== PENGALI =====
+            if r["id_jenis_lembur"] == 5:
+                pengali = Decimal("1")
+            elif is_libur:
+                pengali = Decimal("2")
+            else:
+                pengali = Decimal("1.25")
+
+            upah_lembur = (
+                Decimal(r["menit_lembur"]) / Decimal(60)
+                * upah_per_jam
+                * pengali
+            )
+
+            data.append({
+                "id_lembur": r["id_lembur"],
+                "id_pegawai": id_pegawai,
+                "nama_panggilan": r["nama_panggilan"],
+                "nip": r["nip"],
+                "tanggal": tanggal.isoformat(),
+                "menit_lembur": r["menit_lembur"],
+                "hari_libur": is_libur,
+                "total_bulanan": float(round(total_bulanan)),
+                "upah_per_jam": float(round(upah_per_jam)),
+                "pengali": float(pengali),
+                "upah_lembur": float(round(upah_lembur))
+            })
+
+        return success(
+            message="Rekap lembur berhasil dimuat",
+            data=data,
+            meta={"total": len(data)}
+        )
+
+
+@lembur_ns.route("/rekap/summary")
+class LemburRekapSummaryResource(Resource):
+
+    @jwt_required()
+    @role_required("admin")
+    @lembur_ns.expect(lembur_list_parser)
+    @measure_execution_time
+    def get(self):
+        """(admin) Summary lembur per pegawai"""
+
+        args = lembur_list_parser.parse_args()
+
+        now = get_wita()
+        bulan = args.get("bulan") or now.month
+        tahun = args.get("tahun") or now.year
+
+        start_date = date(tahun, bulan, 1)
+        end_date = date(tahun, bulan, monthrange(tahun, bulan)[1])
+
+        hari_libur_map = get_hari_libur_map(start_date, end_date)
+        hari_kerja = count_hari_kerja(start_date, end_date)
+
+        rows = get_lembur_rekap_summary_raw(
+            start_date=start_date,
+            end_date=end_date,
+            id_departemen=args.get("id_departemen")
+        )
+
+        summary = {}
+        gaji_cache = {}
+
+        for r in rows:
+            id_pegawai = r["id_pegawai"]
+            tanggal = r["tanggal"]
+
+            # ===== HARI LIBUR =====
+            is_minggu = tanggal.weekday() == 6
+            is_libur = is_minggu or tanggal in hari_libur_map
+
+            # ===== GAJI CACHE =====
+            if id_pegawai not in gaji_cache:
+                gaji_rows = get_gaji_dan_tunjangan_pegawai(id_pegawai)
+                upah_harian, upah_per_jam, _ = hitung_upah_per_jam(
+                    gaji_rows=gaji_rows,
+                    id_status_pegawai=r["id_status_pegawai"],
+                    hari_kerja=hari_kerja
+                )
+                gaji_cache[id_pegawai] = upah_per_jam
+
+            upah_per_jam = gaji_cache[id_pegawai]
+
+            # ===== PENGALI =====
+            if r["id_jenis_lembur"] == 5:
+                pengali = Decimal("1")
+            elif is_libur:
+                pengali = Decimal("2")
+            else:
+                pengali = Decimal("1.25")
+
+            upah_lembur = (
+                Decimal(r["menit_lembur"]) / Decimal(60)
+                * upah_per_jam
+                * pengali
+            )
+
+            # ===== INIT SUMMARY =====
+            if id_pegawai not in summary:
+                summary[id_pegawai] = {
+                    "id_pegawai": id_pegawai,
+                    "nama_panggilan": r["nama_panggilan"],
+                    "nip": r["nip"],
+                    "total_lembur": 0,
+                    "total_menit_lembur": 0,
+                    "total_upah_lembur": Decimal("0"),
+                    "last_lembur": tanggal
+                }
+
+            s = summary[id_pegawai]
+            s["total_lembur"] += 1
+            s["total_menit_lembur"] += r["menit_lembur"]
+            s["total_upah_lembur"] += upah_lembur
+
+            if tanggal > s["last_lembur"]:
+                s["last_lembur"] = tanggal
+
+        # ===== FORMAT OUTPUT =====
+        data = []
+        for s in summary.values():
+            data.append({
+                "id_pegawai": s["id_pegawai"],
+                "nama_panggilan": s["nama_panggilan"],
+                "nip": s["nip"],
+                "total_lembur": s["total_lembur"],
+                "total_menit_lembur": s["total_menit_lembur"],
+                "total_jam_lembur": round(s["total_menit_lembur"] / 60),
+                "total_upah_lembur": float(round(s["total_upah_lembur"])),
+                "last_lembur": s["last_lembur"].isoformat()
+            })
+
+        return success(
+            message="Summary lembur pegawai berhasil dimuat",
+            data=data,
+            meta={"total": len(data)}
+        )

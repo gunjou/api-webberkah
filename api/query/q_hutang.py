@@ -224,3 +224,33 @@ def update_hutang_sisa(id_hutang: int, sisa_hutang: float):
                 "now": get_wita()
             }
         )
+
+
+def get_transaksi_pembayaran_hutang_bulanan(bulan: int, tahun: int):
+    """
+    Ambil transaksi pembayaran hutang per bulan
+    """
+    sql = text("""
+        SELECT
+            ht.id_transaksi, ht.id_hutang, h.id_pegawai, p.nama_lengkap, ht.tanggal, ht.jumlah, ht.metode, ht.keterangan
+        FROM hutang_transaksi ht
+        JOIN hutang h
+            ON h.id_hutang = ht.id_hutang
+        JOIN pegawai p
+            ON p.id_pegawai = h.id_pegawai
+        WHERE ht.status = 1
+          AND h.status = 1
+          AND ht.jenis_transaksi = 'pembayaran'
+          AND EXTRACT(MONTH FROM ht.tanggal) = :bulan
+          AND EXTRACT(YEAR FROM ht.tanggal) = :tahun
+        ORDER BY ht.tanggal ASC, ht.created_at ASC
+    """)
+
+    with engine.connect() as conn:
+        return conn.execute(
+            sql,
+            {
+                "bulan": bulan,
+                "tahun": tahun
+            }
+        ).mappings().all()
