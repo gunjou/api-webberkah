@@ -80,7 +80,7 @@ def has_active_shift(id_pegawai: int) -> bool:
 def is_valid_jam_kerja_pegawai(id_pegawai: int, id_jam_kerja: int) -> bool:
     """Cek apakah pegawai boleh mengambil jam kerja ini"""
     # Shift normal (id=1) selalu valid
-    if id_jam_kerja == 1:
+    if id_jam_kerja == 1 or id_jam_kerja == 4:  # Shift normal (id=1) dan shift selama puasa (id=4) selalu valid
         return True
 
     sql = text("""
