@@ -1,6 +1,8 @@
 from sqlalchemy import text
 from datetime import date, timedelta
+from calendar import monthrange
 from decimal import Decimal
+
 from api.shared.helper import get_wita
 from api.utils.config import engine
 
@@ -769,8 +771,26 @@ def get_payroll_by_periode(bulan, tahun):
             "data": []
         }
 
-    data = get_payroll_list(id_periode)
+    data_raw = get_payroll_list(id_periode)
     summary = get_payroll_summary(id_periode)
+    rekap_map = get_rekap_status_payroll(bulan, tahun)
+
+    data = []
+
+    for row in data_raw:
+        row_dict = dict(row)
+
+        r = rekap_map.get(row_dict["id_pegawai"], {})
+
+        row_dict["total_hadir"] = r.get("total_hadir", 0)
+        row_dict["total_izin"] = r.get("total_izin", 0)
+        row_dict["total_sakit"] = r.get("total_sakit", 0)
+        row_dict["total_cuti"] = r.get("total_cuti", 0)
+
+        alpha = r.get("total_alpha", 0) or 0
+        row_dict["total_alpha"] = max(0, alpha)
+
+        data.append(row_dict)
 
     return {
         "periode": f"{bulan:02d}-{tahun}",
@@ -778,6 +798,75 @@ def get_payroll_by_periode(bulan, tahun):
         "data": data
     }
 
+def get_rekap_status_payroll(bulan, tahun):
+    start_date = date(tahun, bulan, 1)
+    last_day = monthrange(tahun, bulan)[1]
+    end_date = date(tahun, bulan, last_day)
+
+    sql = text("""
+        WITH hari_kerja AS (
+            SELECT
+                p.id_pegawai,
+                COUNT(d::date) AS total_hari_kerja
+            FROM pegawai p,
+            generate_series(:start, :end, interval '1 day') d
+            WHERE p.status = 1
+              AND EXTRACT(DOW FROM d) != 0
+              AND d::date NOT IN (
+                  SELECT tanggal
+                  FROM ref_hari_libur
+                  WHERE status = 1
+                    AND tanggal BETWEEN :start AND :end
+              )
+            GROUP BY p.id_pegawai
+        ),
+        hadir AS (
+            SELECT id_pegawai, COUNT(*) AS total_hadir
+            FROM absensi
+            WHERE status = 1
+              AND tanggal BETWEEN :start AND :end
+            GROUP BY id_pegawai
+        ),
+        izin AS (
+            SELECT
+                i.id_pegawai,
+                SUM(CASE WHEN i.id_jenis_izin IN (1,2,6) THEN 1 ELSE 0 END) AS total_izin,
+                SUM(CASE WHEN i.id_jenis_izin = 3 THEN 1 ELSE 0 END) AS total_sakit,
+                SUM(CASE WHEN i.id_jenis_izin IN (4,5) THEN 1 ELSE 0 END) AS total_cuti
+            FROM izin i
+            JOIN generate_series(i.tgl_mulai, i.tgl_selesai, interval '1 day') d
+                ON TRUE
+            WHERE i.status = 1
+              AND i.status_approval = 'approved'
+              AND d::date BETWEEN :start AND :end
+            GROUP BY i.id_pegawai
+        )
+        SELECT
+            hk.id_pegawai,
+            hk.total_hari_kerja,
+            COALESCE(h.total_hadir, 0) AS total_hadir,
+            COALESCE(iz.total_izin, 0) AS total_izin,
+            COALESCE(iz.total_sakit, 0) AS total_sakit,
+            COALESCE(iz.total_cuti, 0) AS total_cuti,
+            (
+                hk.total_hari_kerja
+                - COALESCE(h.total_hadir, 0)
+                - COALESCE(iz.total_izin, 0)
+                - COALESCE(iz.total_sakit, 0)
+                - COALESCE(iz.total_cuti, 0)
+            ) AS total_alpha
+        FROM hari_kerja hk
+        LEFT JOIN hadir h ON h.id_pegawai = hk.id_pegawai
+        LEFT JOIN izin iz ON iz.id_pegawai = hk.id_pegawai
+    """)
+
+    with engine.connect() as conn:
+        rows = conn.execute(sql, {
+            "start": start_date,
+            "end": end_date
+        }).mappings().all()
+
+    return {r["id_pegawai"]: r for r in rows}
 
 
 
