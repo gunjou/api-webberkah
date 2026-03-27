@@ -1,3 +1,6 @@
+import threading
+import uuid
+
 from sqlalchemy import text
 from datetime import date, timedelta
 from calendar import monthrange
@@ -6,6 +9,8 @@ from decimal import Decimal
 from api.shared.helper import get_wita
 from api.utils.config import engine
 
+
+JOB_STATUS = {}
 
 # =========================
 # HELPER
@@ -262,7 +267,10 @@ def simulate_payroll_harian(
 
 def simulate_payroll(id_pegawai, bulan, tahun):
     start_date = date(tahun, bulan, 1)
-    end_date = date(tahun, bulan + 1, 1) - timedelta(days=1)
+    if bulan == 12:
+        end_date = date(tahun + 1, 1, 1) - timedelta(days=1)
+    else:
+        end_date = date(tahun, bulan + 1, 1) - timedelta(days=1)
 
     # =========================
     # AMBIL DATA DASAR
@@ -535,6 +543,7 @@ def update_payroll(id_payroll, ringkasan, statistik):
             updated_at = :now
         WHERE id_payroll = :id_payroll
     """)
+    print("DEBUG: update_payroll", id_payroll, ringkasan, statistik)
     return sql, {
         "id_payroll": id_payroll,
         "pendapatan": ringkasan["total_pendapatan"],
@@ -573,6 +582,7 @@ def insert_payroll(id_pegawai, id_periode, ringkasan, statistik):
         )
         RETURNING id_payroll
     """)
+    print("DEBUG: insert_payroll", id_pegawai, id_periode, ringkasan, statistik)
 
     params = {
         "id_pegawai": id_pegawai,
@@ -596,6 +606,7 @@ def insert_payroll_detail(id_payroll, pendapatan):
             :id_payroll, :kode, :nama, :nilai
         )
     """)
+    print("DEBUG: insert_payroll_detail", id_payroll, pendapatan)
     return [
         (sql, {
             "id_payroll": id_payroll,
@@ -629,73 +640,343 @@ def insert_payroll_potongan_detail(id_payroll, potongan):
         for p in potongan
     ]
 
-def generate_payroll(bulan, tahun):
-    id_periode = get_or_create_payroll_periode(bulan, tahun)
-    pegawai_list = get_all_pegawai_aktif()
+# def generate_payroll(bulan, tahun):
+#     id_periode = get_or_create_payroll_periode(bulan, tahun)
+#     pegawai_list = get_all_pegawai_aktif()
 
-    total_pegawai = 0
-    updated = 0
-    inserted = 0
+#     total_pegawai = 0
+#     updated = 0
+#     inserted = 0
 
-    with engine.begin() as conn:
-        for id_pegawai in pegawai_list:
-            result = simulate_payroll(id_pegawai, bulan, tahun)
+#     # =========================
+#     # 🔥 STEP 1: SIMULATE (NO TRANSACTION)
+#     # =========================
+#     hasil_simulasi = {}
 
-            existing_id = get_existing_payroll(id_pegawai, id_periode)
+#     for id_pegawai in pegawai_list:
+#         print(f"Simulating payroll for id_pegawai={id_pegawai}...")
+#         hasil_simulasi[id_pegawai] = simulate_payroll(id_pegawai, bulan, tahun)
 
-            # =====================
-            # UPSERT HEADER
-            # =====================
-            if existing_id:
-                sql, params = update_payroll(
-                    existing_id,
-                    result["ringkasan"],
-                    result["statistik"]
-                )
-                conn.execute(sql, params)
+#     # =========================
+#     # 🔥 STEP 2: WRITE (TRANSACTION)
+#     # =========================
+#     with engine.begin() as conn:
 
-                # hapus detail lama
-                sql, params = delete_payroll_detail(existing_id)
-                conn.execute(sql, params)
+#         for id_pegawai in pegawai_list:
+#             result = hasil_simulasi[id_pegawai]
 
-                sql, params = delete_payroll_potongan_detail(existing_id)
-                conn.execute(sql, params)
+#             existing_id = get_existing_payroll(id_pegawai, id_periode)
 
-                id_payroll = existing_id
-                updated += 1
-            else:
-                sql, params = insert_payroll(
-                    id_pegawai,
-                    id_periode,
-                    result["ringkasan"],
-                    result["statistik"]
-                )
-                row = conn.execute(sql, params).mappings().first()
-                id_payroll = row["id_payroll"]
-                inserted += 1
+#             # =====================
+#             # UPSERT HEADER
+#             # =====================
+#             if existing_id:
+#                 sql, params = update_payroll(
+#                     existing_id,
+#                     result["ringkasan"],
+#                     result["statistik"]
+#                 )
+#                 conn.execute(sql, params)
 
-            # =====================
-            # INSERT DETAIL BARU
-            # =====================
-            for sql, p in insert_payroll_detail(
-                id_payroll, result["pendapatan"]
-            ):
-                conn.execute(sql, p)
+#                 sql, params = delete_payroll_detail(existing_id)
+#                 conn.execute(sql, params)
 
-            for sql, p in insert_payroll_potongan_detail(
-                id_payroll, result["potongan"]
-            ):
-                conn.execute(sql, p)
+#                 sql, params = delete_payroll_potongan_detail(existing_id)
+#                 conn.execute(sql, params)
 
-            total_pegawai += 1
+#                 id_payroll = existing_id
+#                 updated += 1
 
-    return {
-        "periode": f"{bulan:02d}-{tahun}",
-        "total_pegawai": total_pegawai,
-        "inserted": inserted,
-        "updated": updated
+#             else:
+#                 sql, params = insert_payroll(
+#                     id_pegawai,
+#                     id_periode,
+#                     result["ringkasan"],
+#                     result["statistik"]
+#                 )
+#                 row = conn.execute(sql, params).mappings().first()
+#                 id_payroll = row["id_payroll"]
+#                 inserted += 1
+
+#             # =====================
+#             # INSERT DETAIL
+#             # =====================
+#             detail_list = insert_payroll_detail(
+#                 id_payroll, result["pendapatan"]
+#             )
+
+#             if detail_list:
+#                 for sql, p in detail_list:
+#                     conn.execute(sql, p)
+
+#             potongan_list = insert_payroll_potongan_detail(
+#                 id_payroll, result["potongan"]
+#             )
+
+#             if potongan_list:
+#                 for sql, p in potongan_list:
+#                     conn.execute(sql, p)
+
+#             total_pegawai += 1
+
+#     return {
+#         "periode": f"{bulan:02d}-{tahun}",
+#         "total_pegawai": total_pegawai,
+#         "inserted": inserted,
+#         "updated": updated
+#     }
+
+
+def generate_payroll_with_job(bulan, tahun):
+    job_id = str(uuid.uuid4())
+
+    JOB_STATUS[job_id] = {
+        "status": "starting",
+        "progress": 0,
+        "total": 0,
+        "current": 0,
+        "step": "init"
     }
 
+    # 🔥 JALANKAN DI BACKGROUND
+    thread = threading.Thread(
+        target=run_generate_payroll_job,
+        args=(job_id, bulan, tahun)
+    )
+    thread.start()
+
+    # 🔥 LANGSUNG RETURN (INI YANG KAMU MAU)
+    return job_id
+
+
+def run_generate_payroll_job(job_id, bulan, tahun):
+    try:
+        id_periode = get_or_create_payroll_periode(bulan, tahun)
+        pegawai_list = get_all_pegawai_aktif()
+
+        total = len(pegawai_list)
+
+        JOB_STATUS[job_id].update({
+            "status": "running",
+            "total": total,
+            "current": 0,
+            "progress": 0,
+            "step": "simulate"
+        })
+
+        total_pegawai = 0
+        updated = 0
+        inserted = 0
+
+        hasil_simulasi = {}
+
+        # =========================
+        # STEP 1: SIMULATE
+        # =========================
+        for i, id_pegawai in enumerate(pegawai_list):
+            hasil_simulasi[id_pegawai] = simulate_payroll(id_pegawai, bulan, tahun)
+
+            JOB_STATUS[job_id]["current"] = i + 1
+            JOB_STATUS[job_id]["progress"] = int(((i + 1) / total) * 50)
+
+        # =========================
+        # STEP 2: WRITE
+        # =========================
+        JOB_STATUS[job_id]["step"] = "writing"
+
+        with engine.begin() as conn:
+            for i, id_pegawai in enumerate(pegawai_list):
+                result = hasil_simulasi[id_pegawai]
+
+                existing_id = get_existing_payroll(id_pegawai, id_periode)
+
+                if existing_id:
+                    sql, params = update_payroll(
+                        existing_id,
+                        result["ringkasan"],
+                        result["statistik"]
+                    )
+                    conn.execute(sql, params)
+
+                    sql, params = delete_payroll_detail(existing_id)
+                    conn.execute(sql, params)
+
+                    sql, params = delete_payroll_potongan_detail(existing_id)
+                    conn.execute(sql, params)
+
+                    id_payroll = existing_id
+                    updated += 1
+                else:
+                    sql, params = insert_payroll(
+                        id_pegawai,
+                        id_periode,
+                        result["ringkasan"],
+                        result["statistik"]
+                    )
+                    row = conn.execute(sql, params).mappings().first()
+                    id_payroll = row["id_payroll"]
+                    inserted += 1
+
+                for sql, p in insert_payroll_detail(id_payroll, result["pendapatan"]):
+                    conn.execute(sql, p)
+
+                for sql, p in insert_payroll_potongan_detail(id_payroll, result["potongan"]):
+                    conn.execute(sql, p)
+
+                total_pegawai += 1
+
+                JOB_STATUS[job_id]["current"] = i + 1
+                JOB_STATUS[job_id]["progress"] = 50 + int(((i + 1) / total) * 50)
+
+        JOB_STATUS[job_id].update({
+            "status": "done",
+            "progress": 100,
+            "result": {
+                "periode": f"{bulan:02d}-{tahun}",
+                "total_pegawai": total_pegawai,
+                "inserted": inserted,
+                "updated": updated
+            }
+        })
+
+    except Exception as e:
+        JOB_STATUS[job_id].update({
+            "status": "error",
+            "error": str(e)
+        })
+        
+
+# def run_generate_payroll_job(job_id, bulan, tahun):
+#     # inisialisasi status awal
+#     JOB_STATUS[job_id] = {
+#         "status": "starting",
+#         "progress": 0,
+#         "total": 0,
+#         "current": 0,
+#         "step": "init"
+#     }
+    
+#     print(JOB_STATUS)
+
+#     try:
+#         id_periode = get_or_create_payroll_periode(bulan, tahun)
+#         pegawai_list = get_all_pegawai_aktif()
+
+#         total = len(pegawai_list)
+
+#         JOB_STATUS[job_id].update({
+#             "status": "running",
+#             "total": total,
+#             "current": 0,
+#             "progress": 0,
+#             "step": "simulate"
+#         })
+
+#         total_pegawai = 0
+#         updated = 0
+#         inserted = 0
+
+#         # =========================
+#         # 🔥 STEP 1: SIMULATE
+#         # =========================
+#         hasil_simulasi = {}
+
+#         for i, id_pegawai in enumerate(pegawai_list):
+#             print(f"[SIMULATE] id_pegawai={id_pegawai}")
+
+#             hasil_simulasi[id_pegawai] = simulate_payroll(id_pegawai, bulan, tahun)
+
+#             # update progress (0–50%)
+#             JOB_STATUS[job_id]["current"] = i + 1
+#             JOB_STATUS[job_id]["progress"] = int(((i + 1) / total) * 50)
+
+#         # =========================
+#         # 🔥 STEP 2: WRITE
+#         # =========================
+#         JOB_STATUS[job_id]["step"] = "writing"
+
+#         with engine.begin() as conn:
+
+#             for i, id_pegawai in enumerate(pegawai_list):
+#                 result = hasil_simulasi[id_pegawai]
+
+#                 existing_id = get_existing_payroll(id_pegawai, id_periode)
+
+#                 # =====================
+#                 # UPSERT HEADER
+#                 # =====================
+#                 if existing_id:
+#                     sql, params = update_payroll(
+#                         existing_id,
+#                         result["ringkasan"],
+#                         result["statistik"]
+#                     )
+#                     conn.execute(sql, params)
+
+#                     sql, params = delete_payroll_detail(existing_id)
+#                     conn.execute(sql, params)
+
+#                     sql, params = delete_payroll_potongan_detail(existing_id)
+#                     conn.execute(sql, params)
+
+#                     id_payroll = existing_id
+#                     updated += 1
+
+#                 else:
+#                     sql, params = insert_payroll(
+#                         id_pegawai,
+#                         id_periode,
+#                         result["ringkasan"],
+#                         result["statistik"]
+#                     )
+#                     row = conn.execute(sql, params).mappings().first()
+#                     id_payroll = row["id_payroll"]
+#                     inserted += 1
+
+#                 # =====================
+#                 # INSERT DETAIL
+#                 # =====================
+#                 detail_list = insert_payroll_detail(
+#                     id_payroll, result["pendapatan"]
+#                 )
+
+#                 if detail_list:
+#                     for sql, p in detail_list:
+#                         conn.execute(sql, p)
+
+#                 potongan_list = insert_payroll_potongan_detail(
+#                     id_payroll, result["potongan"]
+#                 )
+
+#                 if potongan_list:
+#                     for sql, p in potongan_list:
+#                         conn.execute(sql, p)
+
+#                 total_pegawai += 1
+
+#                 # update progress (50–100%)
+#                 JOB_STATUS[job_id]["current"] = i + 1
+#                 JOB_STATUS[job_id]["progress"] = 50 + int(((i + 1) / total) * 50)
+
+#         # =========================
+#         # DONE
+#         # =========================
+#         JOB_STATUS[job_id].update({
+#             "status": "done",
+#             "progress": 100,
+#             "result": {
+#                 "periode": f"{bulan:02d}-{tahun}",
+#                 "total_pegawai": total_pegawai,
+#                 "inserted": inserted,
+#                 "updated": updated
+#             }
+#         })
+
+#     except Exception as e:
+#         JOB_STATUS[job_id].update({
+#             "status": "error",
+#             "error": str(e)
+#         })
 
 
 
@@ -727,7 +1008,8 @@ def get_payroll_list(id_periode):
             pr.total_potongan,
             pr.total_diterima,
             pr.total_hari_kerja,
-            pr.total_menit_terlambat
+            pr.total_menit_terlambat,
+            pr.updated_at
         FROM payroll pr
         JOIN pegawai p ON p.id_pegawai = pr.id_pegawai
         JOIN ref_status_pegawai sp ON sp.id_status_pegawai = p.id_status_pegawai

@@ -79,24 +79,32 @@ class PayrollGenerateResource(Resource):
 
     @role_required("admin")
     @payroll_ns.expect(generate_model, validate=True)
-    @measure_execution_time
     def post(self):
         """
         Akses: admin
-        Generate payroll seluruh pegawai (1 periode)
+        Trigger generate payroll (async job)
         """
         body = request.get_json(silent=True) or {}
 
-        result = generate_payroll(
+        job_id = generate_payroll_with_job(
             bulan=body["bulan"],
             tahun=body["tahun"]
         )
 
-        return success(
-            data=result,
-            message="Generate payroll berhasil"
-        )
+        return {
+            "job_id": job_id,
+            "status": "started"
+        }, 202  # ✅ pakai 202 (Accepted)
 
+
+
+@payroll_ns.route("/generate/status/<string:job_id>")
+class PayrollGenerateStatusResource(Resource):
+
+    def get(self, job_id):
+        return JOB_STATUS.get(job_id, {
+            "status": "not_found"
+        })
 
 
 @payroll_ns.route("/komponen-gaji")
