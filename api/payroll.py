@@ -80,21 +80,31 @@ class PayrollGenerateResource(Resource):
     @role_required("admin")
     @payroll_ns.expect(generate_model, validate=True)
     def post(self):
-        """
-        Akses: admin
-        Trigger generate payroll (async job)
-        """
+        global ACTIVE_JOB
+
         body = request.get_json(silent=True) or {}
+
+        # 🔒 CEK JOB MASIH JALAN
+        if ACTIVE_JOB:
+            job = JOB_STATUS.get(ACTIVE_JOB)
+
+            if job and job.get("status") == "running":
+                return {
+                    "message": "Masih ada proses generate berjalan",
+                    "job_id": ACTIVE_JOB
+                }, 409
 
         job_id = generate_payroll_with_job(
             bulan=body["bulan"],
             tahun=body["tahun"]
         )
 
+        ACTIVE_JOB = job_id
+
         return {
             "job_id": job_id,
             "status": "started"
-        }, 202  # ✅ pakai 202 (Accepted)
+        }, 202
 
 
 

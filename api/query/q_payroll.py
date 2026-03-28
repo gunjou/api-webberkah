@@ -11,6 +11,7 @@ from api.utils.config import engine
 
 
 JOB_STATUS = {}
+ACTIVE_JOB = None
 
 # =========================
 # HELPER
@@ -735,7 +736,8 @@ def generate_payroll_with_job(bulan, tahun):
         "progress": 0,
         "total": 0,
         "current": 0,
-        "step": "init"
+        "step": "init",
+        # "started_at": get_wita()
     }
 
     # 🔥 JALANKAN DI BACKGROUND
@@ -750,6 +752,8 @@ def generate_payroll_with_job(bulan, tahun):
 
 
 def run_generate_payroll_job(job_id, bulan, tahun):
+    global ACTIVE_JOB
+    
     try:
         id_periode = get_or_create_payroll_periode(bulan, tahun)
         pegawai_list = get_all_pegawai_aktif()
@@ -763,7 +767,7 @@ def run_generate_payroll_job(job_id, bulan, tahun):
             "progress": 0,
             "step": "simulate"
         })
-
+        
         total_pegawai = 0
         updated = 0
         inserted = 0
@@ -838,12 +842,15 @@ def run_generate_payroll_job(job_id, bulan, tahun):
                 "updated": updated
             }
         })
+        
+        ACTIVE_JOB = None
 
     except Exception as e:
         JOB_STATUS[job_id].update({
             "status": "error",
             "error": str(e)
         })
+        ACTIVE_JOB = None
         
 
 # def run_generate_payroll_job(job_id, bulan, tahun):
