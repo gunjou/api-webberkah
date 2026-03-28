@@ -69,8 +69,8 @@ def _draw_header(canvas, width, height):
     canvas.setFillColor(colors.black)
 
     alamat = [
-        "Ruko Bukit Citra Kencana No.6, Jl. Pengsong Raya, Desa Perampuan,",
-        "Kecamatan Labuapi, Lombok Barat, NTB."
+        "Perumahan Bukit Citra Kencana, Block B no. 35, Jl. Pengsong Raya,",
+        "Desa Perampuan, Kecamatan Labuapi, Lombok Barat, NTB."
     ]
 
     y = height - 60
