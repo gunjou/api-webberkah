@@ -5,7 +5,7 @@ from api.shared.helper import get_wita
 
 def get_hutang_summary_base(status_hutang: str):
     """
-    Ambil data hutang per pegawai (TANPA transaksi)
+    Ambil data hutang per pegawai + keterangan pegawai
     """
     sql = text("""
         SELECT
@@ -15,10 +15,14 @@ def get_hutang_summary_base(status_hutang: str):
             p.nip,
             h.jumlah_awal,
             h.sisa_hutang,
-            h.updated_at
+            h.updated_at,
+            hk.keterangan AS keterangan_pegawai
         FROM hutang h
         JOIN pegawai p
             ON p.id_pegawai = h.id_pegawai
+        LEFT JOIN hutang_keterangan hk
+            ON hk.id_pegawai = h.id_pegawai
+            AND hk.status = 1
         WHERE h.status = 1
           AND h.status_hutang = :status_hutang
         ORDER BY p.nama_lengkap ASC
@@ -254,3 +258,64 @@ def get_transaksi_pembayaran_hutang_bulanan(bulan: int, tahun: int):
                 "tahun": tahun
             }
         ).mappings().all()
+
+
+
+def upsert_hutang_keterangan(id_pegawai: int, keterangan: str) -> str:
+    """
+    Insert jika belum ada, update jika sudah ada
+    Return: 'create' | 'update'
+    """
+
+    check_sql = text("""
+        SELECT id_keterangan
+        FROM hutang_keterangan
+        WHERE id_pegawai = :id_pegawai
+          AND status = 1
+        LIMIT 1
+    """)
+
+    insert_sql = text("""
+        INSERT INTO hutang_keterangan (
+            id_pegawai, keterangan, status, created_at, updated_at
+        ) VALUES (
+            :id_pegawai, :keterangan, 1, :now, :now
+        )
+    """)
+
+    update_sql = text("""
+        UPDATE hutang_keterangan
+        SET
+            keterangan = :keterangan,
+            updated_at = :now
+        WHERE id_keterangan = :id_keterangan
+    """)
+
+    with engine.begin() as conn:
+        existing = conn.execute(
+            check_sql,
+            {"id_pegawai": id_pegawai}
+        ).mappings().first()
+
+        now = get_wita()
+
+        if existing:
+            conn.execute(
+                update_sql,
+                {
+                    "id_keterangan": existing["id_keterangan"],
+                    "keterangan": keterangan,
+                    "now": now
+                }
+            )
+            return "update"
+        else:
+            conn.execute(
+                insert_sql,
+                {
+                    "id_pegawai": id_pegawai,
+                    "keterangan": keterangan,
+                    "now": now
+                }
+            )
+            return "create"

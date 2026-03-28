@@ -41,6 +41,9 @@ hutang_transaksi_bulanan_parser = reqparse.RequestParser()
 hutang_transaksi_bulanan_parser.add_argument("bulan", type=int, required=True, help="Bulan (1-12)")
 hutang_transaksi_bulanan_parser.add_argument("tahun", type=int, required=True, help="Tahun (YYYY)")
 
+hutang_keterangan_parser = reqparse.RequestParser()
+hutang_keterangan_parser.add_argument("id_pegawai", type=int, required=True, help="ID pegawai wajib diisi")
+hutang_keterangan_parser.add_argument("keterangan", type=str, required=True, help="Keterangan wajib diisi")
 
 @hutang_ns.route("")
 class HutangSummaryResource(Resource):
@@ -123,7 +126,8 @@ class HutangSummaryResource(Resource):
                     "total_pinjaman": 0,
                     "total_dibayar": 0,
                     "sisa_hutang": 0,
-                    "last_update": None
+                    "last_update": None,
+                    "keterangan": h.get("keterangan_pegawai")
                 }
 
             p = pegawai_map[pid]
@@ -226,7 +230,6 @@ class HutangPegawaiDetailResource(Resource):
 
 
 
-# hutang.py
 @hutang_ns.route("/pembayaran")
 class HutangPembayaranResource(Resource):
 
@@ -339,5 +342,39 @@ class HutangPembayaranResource(Resource):
                 "bulan": bulan,
                 "tahun": tahun,
                 "total": len(rows)
+            }
+        )
+
+
+
+@hutang_ns.route("/keterangan")
+class HutangKeteranganResource(Resource):
+
+    @jwt_required()
+    @role_required("admin")
+    @hutang_ns.expect(hutang_keterangan_parser)
+    @measure_execution_time
+    def post(self):
+        """(admin) Create / Update keterangan hutang pegawai"""
+
+        args = hutang_keterangan_parser.parse_args()
+
+        id_pegawai = args["id_pegawai"]
+        keterangan = args["keterangan"].strip()
+
+        if not keterangan:
+            raise ValidationError("Keterangan tidak boleh kosong")
+
+        result = upsert_hutang_keterangan(
+            id_pegawai=id_pegawai,
+            keterangan=keterangan
+        )
+
+        return success(
+            message="Keterangan hutang berhasil disimpan",
+            data={
+                "id_pegawai": id_pegawai,
+                "keterangan": keterangan,
+                "action": result  # create / update
             }
         )
