@@ -208,8 +208,8 @@ class AbsensiCheckInResource(Resource):
         file = args["file"]
         latitude = args["latitude"]
         longitude = args["longitude"]
-        # id_jam_kerja = args.get("id_jam_kerja") or 1
-        id_jam_kerja = args.get("id_jam_kerja") or 4 # default selama puasa 
+        id_jam_kerja = args.get("id_jam_kerja") or 1
+        # id_jam_kerja = args.get("id_jam_kerja") or 4 # default selama puasa 
 
         now = get_wita()
         jam_masuk = now.time()
