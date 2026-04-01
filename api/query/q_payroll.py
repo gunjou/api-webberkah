@@ -174,12 +174,14 @@ def get_gaji_dan_komponen(id_pegawai):
 def get_absensi(id_pegawai, start_date, end_date):
     sql = text("""
         SELECT
-            tanggal,
-            menit_terlambat
-        FROM absensi
-        WHERE id_pegawai = :id
-          AND tanggal BETWEEN :start AND :end
-          AND status = 1
+            a.tanggal,
+            a.menit_terlambat
+        FROM absensi a
+        INNER JOIN pegawai p ON p.id_pegawai = a.id_pegawai
+        WHERE a.id_pegawai = :id
+          AND a.tanggal BETWEEN :start AND :end
+          AND a.status = 1
+          AND p.status = 1
     """)
     with engine.connect() as conn:
         return conn.execute(sql, {
