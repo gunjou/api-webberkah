@@ -1,5 +1,9 @@
 from decimal import Decimal
+from datetime import date, time, datetime
+from calendar import monthrange
 from sqlalchemy import text
+from api.query.q_absensi import get_hari_libur_map
+from api.query.q_payroll import count_hari_kerja
 from api.utils.config import engine
 from api.shared.helper import get_wita
 
@@ -36,17 +40,30 @@ def insert_pengajuan_lembur(
     keterangan: str,
     path_lampiran: str
 ):
+    # 🔥 HITUNG TOTAL BAYARAN
+    total_bayaran, menit_lembur = hitung_total_bayaran_lembur(
+        id_pegawai=id_pegawai,
+        id_jenis_lembur=id_jenis_lembur,
+        tanggal=tanggal,
+        jam_mulai=jam_mulai,
+        jam_selesai=jam_selesai,
+        menit_lembur=menit_lembur
+    )
+
     sql = text("""
         INSERT INTO lembur (
-            id_pegawai, id_jenis_lembur, tanggal, jam_mulai, jam_selesai, menit_lembur, status_approval, 
+            id_pegawai, id_jenis_lembur, tanggal, jam_mulai, jam_selesai,
+            menit_lembur, total_bayaran, status_approval,
             keterangan, path_lampiran, status
         )
         VALUES (
-            :id_pegawai, :id_jenis_lembur, :tanggal, :jam_mulai, :jam_selesai, :menit_lembur, 'pending', 
+            :id_pegawai, :id_jenis_lembur, :tanggal, :jam_mulai, :jam_selesai,
+            :menit_lembur, :total_bayaran, 'pending',
             :keterangan, :path_lampiran, 1
         )
         RETURNING id_lembur
     """)
+
     with engine.begin() as conn:
         return conn.execute(
             sql,
@@ -57,9 +74,11 @@ def insert_pengajuan_lembur(
                 "jam_mulai": jam_mulai,
                 "jam_selesai": jam_selesai,
                 "menit_lembur": menit_lembur,
+                "total_bayaran": float(total_bayaran),  # 🔥 TAMBAH
                 "keterangan": keterangan,
                 "path_lampiran": path_lampiran
-            } ).scalar()
+            }
+        ).scalar()
 
 
 # ======================================================================
@@ -72,7 +91,7 @@ def get_lembur_aktif_harian(id_pegawai: int, tanggal):
     sql = text("""
         SELECT
             l.id_lembur, l.id_jenis_lembur, jl.nama_jenis, l.tanggal, l.jam_mulai, l.jam_selesai, l.menit_lembur, 
-            l.status_approval, l.keterangan
+            l.total_bayaran, l.status_approval, l.keterangan
         FROM lembur l
         JOIN ref_jenis_lembur jl
             ON jl.id_jenis_lembur = l.id_jenis_lembur
@@ -227,6 +246,7 @@ def update_lembur_admin(
     jam_mulai,
     jam_selesai,
     menit_lembur: int,
+    total_bayaran,
     keterangan: str,
     path_lampiran: str | None
 ):
@@ -238,6 +258,7 @@ def update_lembur_admin(
             jam_mulai = :jam_mulai,
             jam_selesai = :jam_selesai,
             menit_lembur = :menit_lembur,
+            total_bayaran = :total_bayaran,
             keterangan = :keterangan,
             path_lampiran = :path_lampiran,
             updated_at = :now
@@ -255,12 +276,12 @@ def update_lembur_admin(
                 "jam_mulai": jam_mulai,
                 "jam_selesai": jam_selesai,
                 "menit_lembur": menit_lembur,
+                "total_bayaran": float(total_bayaran) if total_bayaran else None,
                 "keterangan": keterangan,
                 "path_lampiran": path_lampiran,
                 "now": get_wita()
             }
         )
-
 
 
 # ======================================================================
@@ -313,6 +334,93 @@ def update_lembur_approval(
             "alasan_penolakan": alasan_penolakan,
             "now": get_wita()
         })
+
+
+# ===== QUERY HITUNG TOTAL BAYARAN LEMBUR =====
+def get_status_pegawai(id_pegawai):
+    sql = text("""
+        SELECT id_status_pegawai
+        FROM pegawai
+        WHERE id_pegawai = :id
+    """)
+    with engine.connect() as conn:
+        row = conn.execute(sql, {"id": id_pegawai}).mappings().first()
+        return row["id_status_pegawai"] if row else None
+    
+    
+def hitung_menit_lembur_fix(tanggal, jam_mulai, jam_selesai):
+    """
+    Rule:
+    - Jika melewati jam istirahat (12:00–14:00) → dikurangi 120 menit (sekali saja)
+    - Jika tidak melewati → normal
+    """
+
+    start = datetime.combine(tanggal, jam_mulai)
+    end = datetime.combine(tanggal, jam_selesai)
+
+    total_menit = int((end - start).total_seconds() / 60)
+
+    istirahat_start = datetime.combine(tanggal, time(12, 0))
+    istirahat_end = datetime.combine(tanggal, time(14, 0))
+
+    # hanya dikurangi jika melewati dua sisi istirahat
+    if start < istirahat_start and end > istirahat_end:
+        total_menit -= 60
+
+    return min(total_menit, 480)
+    
+    
+def hitung_total_bayaran_lembur(
+    id_pegawai,
+    id_jenis_lembur,
+    tanggal,
+    jam_mulai,
+    jam_selesai,
+    menit_lembur
+):
+    # ===== HITUNG MENIT SESUAI RULE =====
+    menit_lembur = hitung_menit_lembur_fix(
+        tanggal, jam_mulai, jam_selesai
+    )
+
+    # ===== CEK LIBUR =====
+    hari_libur = get_hari_libur_map(tanggal, tanggal)
+    is_minggu = tanggal.weekday() == 6
+    is_libur = is_minggu or tanggal in hari_libur
+
+    # ===== AMBIL STATUS PEGAWAI =====
+    id_status_pegawai = get_status_pegawai(id_pegawai)
+
+    # ===== AMBIL GAJI =====
+    gaji_rows = get_gaji_dan_tunjangan_pegawai(id_pegawai)
+
+    hari_kerja = count_hari_kerja(
+        date(tanggal.year, tanggal.month, 1),
+        date(tanggal.year, tanggal.month, monthrange(tanggal.year, tanggal.month)[1])
+    )
+
+    _, upah_per_jam, _ = hitung_upah_per_jam(
+        gaji_rows=gaji_rows,
+        id_status_pegawai=id_status_pegawai,
+        hari_kerja=hari_kerja
+    )
+
+    # ===== PENGALI =====
+    if id_jenis_lembur == 5:
+        pengali = Decimal("1")
+    elif is_libur:
+        pengali = Decimal("2")
+    else:
+        pengali = Decimal("1.25")
+
+    total_bayaran = (
+        Decimal(menit_lembur) / Decimal(60)
+        * upah_per_jam
+        * pengali
+    )
+
+    return total_bayaran, menit_lembur
+
 
 
 def get_gaji_dan_tunjangan_pegawai(id_pegawai: int):
@@ -390,6 +498,7 @@ def get_lembur_rekap_raw(start_date, end_date, id_departemen=None, id_pegawai=No
             l.id_jenis_lembur,
             l.tanggal,
             l.menit_lembur,
+            l.total_bayaran,
             pg.gaji_pokok
         FROM lembur l
         JOIN pegawai p ON p.id_pegawai = l.id_pegawai
@@ -433,7 +542,8 @@ def get_lembur_rekap_summary_raw(
             p.id_status_pegawai,
             l.id_jenis_lembur,
             l.tanggal,
-            l.menit_lembur
+            l.menit_lembur,
+            l.total_bayaran
         FROM lembur l
         JOIN pegawai p ON p.id_pegawai = l.id_pegawai
         WHERE l.status = 1

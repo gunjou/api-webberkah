@@ -428,12 +428,15 @@ class LemburUpdateResource(Resource):
             raise ValidationError("Jam selesai harus lebih besar dari jam mulai")
 
         menit_lembur = None
+        total_bayaran = None
         if jam_mulai and jam_selesai:
-            menit_lembur = int(
-                (
-                    datetime.combine(tanggal, jam_selesai)
-                    - datetime.combine(tanggal, jam_mulai)
-                ).total_seconds() / 60
+            total_bayaran, menit_lembur = hitung_total_bayaran_lembur(
+                id_pegawai=lembur["id_pegawai"],
+                id_jenis_lembur=args.get("id_jenis_lembur") or lembur["id_jenis_lembur"],
+                tanggal=tanggal,
+                jam_mulai=jam_mulai,
+                jam_selesai=jam_selesai,
+                menit_lembur=0  # akan dihitung ulang di dalam
             )
 
         # Upload lampiran jika ada
@@ -448,6 +451,7 @@ class LemburUpdateResource(Resource):
             jam_mulai=jam_mulai,
             jam_selesai=jam_selesai,
             menit_lembur=menit_lembur,
+            total_bayaran=total_bayaran,
             keterangan=args.get("keterangan"),
             path_lampiran=path_lampiran
         )
@@ -608,11 +612,16 @@ class LemburRekapResource(Resource):
             else:
                 pengali = Decimal("1.25")
 
-            upah_lembur = (
-                Decimal(r["menit_lembur"]) / Decimal(60)
-                * upah_per_jam
-                * pengali
-            )
+            # ===== PRIORITAS TOTAL BAYARAN =====
+            total_bayaran = r["total_bayaran"]
+            if total_bayaran:
+                upah_lembur = Decimal(total_bayaran)
+            else:
+                upah_lembur = (
+                    Decimal(r["menit_lembur"]) / Decimal(60)
+                    * upah_per_jam
+                    * pengali
+                )
 
             data.append({
                 "id_lembur": r["id_lembur"],
@@ -694,11 +703,16 @@ class LemburRekapSummaryResource(Resource):
             else:
                 pengali = Decimal("1.25")
 
-            upah_lembur = (
-                Decimal(r["menit_lembur"]) / Decimal(60)
-                * upah_per_jam
-                * pengali
-            )
+            # ===== PRIORITAS TOTAL BAYARAN =====
+            total_bayaran = r["total_bayaran"]
+            if total_bayaran:
+                upah_lembur = Decimal(total_bayaran)
+            else:
+                upah_lembur = (
+                    Decimal(r["menit_lembur"]) / Decimal(60)
+                    * upah_per_jam
+                    * pengali
+                )
 
             # ===== INIT SUMMARY =====
             if id_pegawai not in summary:
