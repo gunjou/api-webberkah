@@ -13,6 +13,7 @@ from api.shared.helper import count_hari_dalam_bulan, get_wita
 from api.shared.response import success
 from api.utils.decorator import measure_execution_time
 from api.query.q_absensi import *
+from api.query.q_lembur import insert_pengajuan_lembur
 from api.utils.face import verify_face
 from api.utils.geo import find_valid_lokasi
 from api.utils.time_calc import *
@@ -356,6 +357,34 @@ class AbsensiCheckoutResource(Resource):
             id_lokasi_keluar=lokasi_valid["id_lokasi"],
             total_menit_kerja=total_menit_kerja
         )
+        
+        # =========================
+        # 🔥 AUTO LEMBUR (HARI LIBUR)
+        # =========================
+        if is_hari_libur(tanggal):
+
+            # ambil jam masuk dari absensi
+            jam_mulai = absensi["jam_masuk"]
+            jam_selesai = now_time
+
+            # hitung menit lembur (sementara, nanti dihitung ulang di function lembur)
+            menit_lembur = int(
+                (
+                    datetime.combine(tanggal, jam_selesai)
+                    - datetime.combine(tanggal, jam_mulai)
+                ).total_seconds() / 60
+            )
+
+            insert_pengajuan_lembur(
+                id_pegawai=id_pegawai,
+                id_jenis_lembur=6,  # ⚠️ sesuaikan (misalnya: lembur hari libur)
+                tanggal=tanggal,
+                jam_mulai=jam_mulai,
+                jam_selesai=jam_selesai,
+                menit_lembur=menit_lembur,
+                keterangan=f"Lembur otomatis dari absensi pada {tanggal.strftime('%d %B %Y')}",
+                path_lampiran=None
+            )
 
         # 8️⃣ Response
         return success(

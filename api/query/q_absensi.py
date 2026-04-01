@@ -506,3 +506,7 @@ def get_hari_libur_map(start_date, end_date):
         ).fetchall()
 
     return {row[0] for row in rows}  # set of date
+
+def is_hari_libur(tanggal):
+    hari_libur = get_hari_libur_map(tanggal, tanggal)
+    return tanggal.weekday() == 6 or tanggal in hari_libur
