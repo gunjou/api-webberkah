@@ -13,6 +13,11 @@ from api.utils.config import engine
 JOB_STATUS = {}
 ACTIVE_JOB = None
 
+SPECIAL_PEGAWAI = {2, 8, 9, 13, 29}
+
+def is_pegawai_special(id_pegawai):
+    return id_pegawai in SPECIAL_PEGAWAI
+
 # =========================
 # HELPER
 # =========================
@@ -297,6 +302,8 @@ def simulate_payroll(id_pegawai, bulan, tahun):
                 "total_menit_terlambat": 0
             }
         }
+        
+    is_special = is_pegawai_special(id_pegawai)
 
     status_pegawai = pegawai["nama_status"]
 
@@ -353,75 +360,76 @@ def simulate_payroll(id_pegawai, bulan, tahun):
     # =========================
     # LOOP POTONGAN HARIAN
     # =========================
-    for tanggal, s in status_harian.items():
+    if not is_special:
+        for tanggal, s in status_harian.items():
 
-        # skip minggu & libur nasional
-        if tanggal.weekday() == 6 or tanggal in hari_libur:
-            continue
+            # skip minggu & libur nasional
+            if tanggal.weekday() == 6 or tanggal in hari_libur:
+                continue
 
-        status = s["status"]
+            status = s["status"]
 
-        # -------------------------
-        # TELAT → POTONG TRANSPORT
-        # -------------------------
-        if (
-            status == "HADIR"
-            and s["menit_terlambat"] > 0
-            and "T_TRP" in nilai_harian
-        ):
-            persen = get_persen_telat(s["menit_terlambat"])
-            potong = nilai_harian["T_TRP"] * persen
+            # -------------------------
+            # TELAT → POTONG TRANSPORT
+            # -------------------------
+            if (
+                status == "HADIR"
+                and s["menit_terlambat"] > 0
+                and "T_TRP" in nilai_harian
+            ):
+                persen = get_persen_telat(s["menit_terlambat"])
+                potong = nilai_harian["T_TRP"] * persen
 
-            if potong > 0:
-                potongan.append({
-                    "tanggal": tanggal.isoformat(),
-                    "kode": "TELAT_TRP",
-                    "nilai": float(potong.quantize(Decimal("0.01")))
-                })
-                total_potongan += potong
-
-        # -------------------------
-        # IZIN → POTONG TRP & MKN
-        # -------------------------
-        elif status == "IZIN":
-            for kode in ("T_TRP", "T_MKN"):
-                if kode in nilai_harian:
-                    potong = nilai_harian[kode]
+                if potong > 0:
                     potongan.append({
                         "tanggal": tanggal.isoformat(),
-                        "kode": kode,
+                        "kode": "TELAT_TRP",
                         "nilai": float(potong.quantize(Decimal("0.01")))
                     })
                     total_potongan += potong
 
-        # -------------------------
-        # SAKIT → POTONG TRP SAJA
-        # -------------------------
-        elif status == "SAKIT":
-            if "T_TRP" in nilai_harian:
-                potong = nilai_harian["T_TRP"]
-                potongan.append({
-                    "tanggal": tanggal.isoformat(),
-                    "kode": "T_TRP",
-                    "nilai": float(potong.quantize(Decimal("0.01")))
-                })
-                total_potongan += potong
+            # -------------------------
+            # IZIN → POTONG TRP & MKN
+            # -------------------------
+            elif status == "IZIN":
+                for kode in ("T_TRP", "T_MKN"):
+                    if kode in nilai_harian:
+                        potong = nilai_harian[kode]
+                        potongan.append({
+                            "tanggal": tanggal.isoformat(),
+                            "kode": kode,
+                            "nilai": float(potong.quantize(Decimal("0.01")))
+                        })
+                        total_potongan += potong
 
-        # -------------------------
-        # ALPHA → POTONG TRP & MKN
-        # (PEGAWAI TETAP & MAGANG)
-        # -------------------------
-        elif status == "ALPHA" and status_pegawai in ("Pegawai Tetap", "Magang"):
-            for kode in ("T_TRP", "T_MKN"):
-                if kode in nilai_harian:
-                    potong = nilai_harian[kode]
+            # -------------------------
+            # SAKIT → POTONG TRP SAJA
+            # -------------------------
+            elif status == "SAKIT":
+                if "T_TRP" in nilai_harian:
+                    potong = nilai_harian["T_TRP"]
                     potongan.append({
                         "tanggal": tanggal.isoformat(),
-                        "kode": kode,
-                        "nilai": float(potong.quantize(Decimal("0.01"))),
-                        "keterangan": "Alpha"
+                        "kode": "T_TRP",
+                        "nilai": float(potong.quantize(Decimal("0.01")))
                     })
                     total_potongan += potong
+
+            # -------------------------
+            # ALPHA → POTONG TRP & MKN
+            # (PEGAWAI TETAP & MAGANG)
+            # -------------------------
+            elif status == "ALPHA" and status_pegawai in ("Pegawai Tetap", "Magang"):
+                for kode in ("T_TRP", "T_MKN"):
+                    if kode in nilai_harian:
+                        potong = nilai_harian[kode]
+                        potongan.append({
+                            "tanggal": tanggal.isoformat(),
+                            "kode": kode,
+                            "nilai": float(potong.quantize(Decimal("0.01"))),
+                            "keterangan": "Alpha"
+                        })
+                        total_potongan += potong
 
     # =========================
     # PEGAWAI TIDAK TETAP
@@ -437,8 +445,15 @@ def simulate_payroll(id_pegawai, bulan, tahun):
     # =========================
     # STATISTIK
     # =========================
-    total_hari_kerja = hitung_hari_kerja_pegawai(status_harian)
-    total_menit_terlambat = hitung_total_menit_terlambat(status_harian)
+    if is_special:
+        # Pegawai khusus:
+        # - dianggap selalu hadir
+        # - tidak dihitung keterlambatan
+        total_hari_kerja = hari_kerja_efektif
+        total_menit_terlambat = 0
+    else:
+        total_hari_kerja = hitung_hari_kerja_pegawai(status_harian)
+        total_menit_terlambat = hitung_total_menit_terlambat(status_harian)
 
     # =========================
     # RETURN
