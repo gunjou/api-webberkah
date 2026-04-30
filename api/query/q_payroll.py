@@ -308,6 +308,8 @@ def simulate_payroll(id_pegawai, bulan, tahun):
     is_special = is_pegawai_special(id_pegawai)
 
     status_pegawai = pegawai["nama_status"]
+    status_harian_based = {"Pegawai Tidak Tetap", "Harian Lepas"}
+    status_bulanan_based = {"Pegawai Tetap", "Pegawai Kontrak", "Magang"}
 
     komponen_raw = get_gaji_dan_komponen(id_pegawai)
     absensi = get_absensi(id_pegawai, start_date, end_date)
@@ -355,9 +357,18 @@ def simulate_payroll(id_pegawai, bulan, tahun):
     # HITUNG NILAI HARIAN
     # =========================
     nilai_harian = {}
-    for kode in ("T_TRP", "T_MKN"):
-        if kode in komp and hari_kerja_efektif > 0:
-            nilai_harian[kode] = komp[kode]["bulanan"] / Decimal(hari_kerja_efektif)
+
+    if status_pegawai in status_bulanan_based:
+        # bulanan → bagi hari kerja efektif
+        for kode in ("T_TRP", "T_MKN"):
+            if kode in komp and hari_kerja_efektif > 0:
+                nilai_harian[kode] = komp[kode]["bulanan"] / Decimal(hari_kerja_efektif)
+
+    elif status_pegawai in status_harian_based:
+        # sudah harian → tidak dibagi
+        for kode in ("T_TRP", "T_MKN"):
+            if kode in komp:
+                nilai_harian[kode] = komp[kode]["bulanan"]
 
     # =========================
     # LOOP POTONGAN HARIAN
@@ -391,9 +402,9 @@ def simulate_payroll(id_pegawai, bulan, tahun):
                     total_potongan += potong
 
             # -------------------------
-            # IZIN → POTONG TRP & MKN
+            # IZIN & SAKIT → POTONG TRP & MKN
             # -------------------------
-            elif status == "IZIN":
+            elif status in ("IZIN", "SAKIT"):
                 for kode in ("T_TRP", "T_MKN"):
                     if kode in nilai_harian:
                         potong = nilai_harian[kode]
@@ -405,23 +416,10 @@ def simulate_payroll(id_pegawai, bulan, tahun):
                         total_potongan += potong
 
             # -------------------------
-            # SAKIT → POTONG TRP SAJA
-            # -------------------------
-            elif status == "SAKIT":
-                if "T_TRP" in nilai_harian:
-                    potong = nilai_harian["T_TRP"]
-                    potongan.append({
-                        "tanggal": tanggal.isoformat(),
-                        "kode": "T_TRP",
-                        "nilai": float(potong.quantize(Decimal("0.01")))
-                    })
-                    total_potongan += potong
-
-            # -------------------------
             # ALPHA → POTONG TRP & MKN
             # (PEGAWAI TETAP & MAGANG)
             # -------------------------
-            elif status == "ALPHA" and status_pegawai in ("Pegawai Tetap", "Magang"):
+            elif status == "ALPHA" and status_pegawai in status_bulanan_based:
                 for kode in ("T_TRP", "T_MKN"):
                     if kode in nilai_harian:
                         potong = nilai_harian[kode]
@@ -436,7 +434,7 @@ def simulate_payroll(id_pegawai, bulan, tahun):
     # =========================
     # PEGAWAI TIDAK TETAP
     # =========================
-    if status_pegawai == "Pegawai Tidak Tetap":
+    if status_pegawai in status_harian_based:
         pendapatan, potongan, total_pendapatan, total_potongan, hari_kerja_efektif = \
             simulate_payroll_harian(
                 pegawai,
