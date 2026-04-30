@@ -360,7 +360,8 @@ def revive_absensi_manual(
 def get_pegawai_rekap(id_departemen=None, id_status_pegawai=None):
     sql = """
         SELECT
-            p.id_pegawai, p.nip, p.nama_lengkap, nama_panggilan, d.id_departemen, d.nama_departemen, 
+            p.id_pegawai, p.nip, p.nama_lengkap, nama_panggilan,
+            d.id_departemen, d.nama_departemen, 
             s.id_status_pegawai, s.nama_status
         FROM pegawai p
         LEFT JOIN ref_departemen d
@@ -368,9 +369,12 @@ def get_pegawai_rekap(id_departemen=None, id_status_pegawai=None):
         LEFT JOIN ref_status_pegawai s
             ON s.id_status_pegawai = p.id_status_pegawai
         WHERE p.status = 1
+          AND p.id_pegawai NOT IN :excluded_ids
     """
 
-    params = {}
+    params = {
+        "excluded_ids": tuple([2, 9, 13, 29])
+    }
 
     if id_departemen:
         sql += " AND p.id_departemen = :id_departemen"

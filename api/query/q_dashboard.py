@@ -49,7 +49,7 @@ def count_pegawai_aktif_dashboard():
         SELECT COUNT(*) AS total
         FROM pegawai
         WHERE status = 1
-          AND id_pegawai NOT IN (2, 13)
+          AND id_pegawai NOT IN (2, 9, 13, 29)
     """)
 
     with engine.connect() as conn:
@@ -76,7 +76,7 @@ def get_pegawai_aktif_dashboard():
                ON sp.id_status_pegawai = p.id_status_pegawai
               AND sp.status = 1
         WHERE p.status = 1
-          AND p.id_pegawai NOT IN (2, 13)
+          AND p.id_pegawai NOT IN (2, 9, 13, 29)
         ORDER BY p.nama_lengkap ASC
     """)
 
@@ -122,7 +122,7 @@ def get_presensi_hadir_hari_ini_simple():
         WHERE a.tanggal = :tanggal
           AND a.jam_masuk IS NOT NULL
           AND a.status = 1
-          AND p.id_pegawai NOT IN (2, 13)
+          AND p.id_pegawai NOT IN (2, 9, 13, 29)
 
         ORDER BY a.jam_masuk ASC
     """)
@@ -157,7 +157,7 @@ def get_presensi_terlambat_hari_ini_simple():
         WHERE a.tanggal = :tanggal
           AND a.menit_terlambat > 0
           AND a.status = 1
-          AND p.id_pegawai NOT IN (2, 13)
+          AND p.id_pegawai NOT IN (2, 9, 13, 29)
         ORDER BY a.menit_terlambat DESC, a.jam_masuk ASC
     """)
     with engine.connect() as conn:
@@ -212,7 +212,7 @@ def get_pegawai_izin_hari_ini_dashboard():
           AND i.status_approval = 'approved'
           AND :tanggal BETWEEN i.tgl_mulai AND i.tgl_selesai
           AND i.id_jenis_izin IN (1, 2, 3, 4, 5, 6)
-          AND p.id_pegawai NOT IN (2, 13)
+          AND p.id_pegawai NOT IN (2, 9, 13, 29)
 
         ORDER BY kategori_izin, p.nama_lengkap ASC
     """)
@@ -270,7 +270,7 @@ def get_pegawai_alpha_hari_ini():
               AND :tanggal BETWEEN i.tgl_mulai AND i.tgl_selesai
 
         WHERE p.status = 1
-          AND p.id_pegawai NOT IN (2, 13)
+          AND p.id_pegawai NOT IN (2, 9, 13, 29)
           AND a.id_absensi IS NULL
           AND i.id_izin IS NULL
 
@@ -301,7 +301,7 @@ def get_sebaran_presensi_lokasi_hari_ini():
         FROM v_admin_presensi_harian
         WHERE tanggal = :tanggal
           AND jam_checkin IS NOT NULL
-          AND id_pegawai NOT IN (2, 13)
+          AND id_pegawai NOT IN (2, 9, 13, 29)
         GROUP BY id_lokasi_masuk, lokasi_checkin
         ORDER BY total DESC
     """)
