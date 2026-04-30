@@ -104,6 +104,47 @@ def get_pegawai_pendidikan_report_filtered(status_pegawai: str | None = None):
 
 
 
+def get_pegawai_gaji_report_filtered(status_pegawai: str | None = None):
+    sql = """
+        SELECT
+            p.id_pegawai, p.nip, p.nama_lengkap, sp.nama_status AS status_pegawai, pg.gaji_pokok, 
+            rk.id_komponen, rk.kode, rk.nama_komponen, pgk.nilai
+        FROM pegawai p
+        LEFT JOIN ref_status_pegawai sp
+            ON sp.id_status_pegawai = p.id_status_pegawai
+        LEFT JOIN pegawai_gaji pg
+            ON pg.id_pegawai = p.id_pegawai
+           AND pg.status = 1
+        CROSS JOIN ref_komponen_gaji rk
+        LEFT JOIN pegawai_gaji_komponen pgk
+            ON pgk.id_pegawai = p.id_pegawai
+           AND pgk.id_komponen = rk.id_komponen
+           AND pgk.status = 1
+        WHERE
+            p.status = 1
+            AND rk.status = 1
+    """
+    params = {}
+    if status_pegawai:
+        sql += " AND sp.id_status_pegawai = :status_pegawai"
+        params["status_pegawai"] = status_pegawai
+    sql += """
+        ORDER BY
+            CASE 
+                WHEN sp.id_status_pegawai = 1 THEN 1
+                WHEN sp.id_status_pegawai = 3 THEN 2
+                WHEN sp.id_status_pegawai = 2 THEN 3
+                WHEN sp.id_status_pegawai = 5 THEN 4
+                ELSE 99
+            END,
+            p.nama_lengkap ASC,
+            rk.id_komponen ASC
+    """
+    with engine.connect() as conn:
+        return conn.execute(text(sql), params).mappings().all()
+    
+    
+
 def get_pegawai_akun_report_filtered(status_pegawai: str | None = None):
     sql = """
         SELECT

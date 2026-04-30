@@ -264,6 +264,42 @@ def get_pegawai_lokasi():
     """)
     with engine.connect() as conn:
         return conn.execute(sql).mappings().all()
+    
+    
+def get_pegawai_komponen_gaji():
+    """
+    Ambil data komponen gaji pegawai (TAB GAJI)
+    - Semua pegawai aktif
+    - Semua komponen gaji ditampilkan
+    - Nilai bisa NULL jika belum diset
+    """
+    sql = text("""
+        SELECT
+            p.id_pegawai, p.nip, p.nama_lengkap, p.tanggal_masuk, sp.nama_status AS status_pegawai, pg.gaji_pokok, 
+            rk.id_komponen, rk.kode, rk.nama_komponen, rk.tipe, rk.metode_hitung, pgk.nilai
+        FROM pegawai p
+        LEFT JOIN ref_status_pegawai sp
+            ON sp.id_status_pegawai = p.id_status_pegawai
+        LEFT JOIN pegawai_gaji pg
+            ON pg.id_pegawai = p.id_pegawai
+           AND pg.status = 1
+        -- penting: ambil semua komponen aktif
+        CROSS JOIN ref_komponen_gaji rk
+        LEFT JOIN pegawai_gaji_komponen pgk
+            ON pgk.id_pegawai = p.id_pegawai
+           AND pgk.id_komponen = rk.id_komponen
+           AND pgk.status = 1
+        WHERE
+            p.status = 1
+            AND rk.status = 1
+        ORDER BY
+            p.nama_lengkap ASC,
+            p.id_pegawai ASC,
+            rk.id_komponen ASC
+    """)
+
+    with engine.connect() as conn:
+        return conn.execute(sql).mappings().all()
 
 
 
@@ -465,6 +501,113 @@ def upsert_pegawai_rekening(id_pegawai: int, nama_bank: str, no_rekening: str, a
                 "atas_nama": atas_nama,
                 "now": get_wita()
             })
+
+
+
+# ==================================================
+# UPSERT GAJI & KOMPONEN GAJI PEGAWAI
+# ==================================================
+def upsert_pegawai_gaji(id_pegawai: int, gaji_pokok, komponen_gaji: list):
+    """
+    Upsert:
+    - pegawai_gaji (gaji pokok)
+    - pegawai_gaji_komponen (bulk upsert)
+    """
+    now = get_wita()
+    with engine.begin() as conn:
+        # =========================
+        # 1. UPSERT GAJI POKOK
+        # =========================
+        id_gaji = conn.execute(
+            text("""
+                SELECT id FROM pegawai_gaji WHERE id_pegawai = :id LIMIT 1
+            """),
+            {"id": id_pegawai}
+        ).scalar()
+
+        if id_gaji:
+            # UPDATE
+            conn.execute(text("""
+                UPDATE pegawai_gaji
+                SET gaji_pokok = :gaji_pokok, updated_at = :now
+                WHERE id_pegawai = :id_pegawai AND status = 1
+            """), {
+                "id_pegawai": id_pegawai,
+                "gaji_pokok": gaji_pokok,
+                "now": now
+            })
+
+        else:
+            # INSERT
+            conn.execute(text("""
+                INSERT INTO pegawai_gaji (
+                    id_pegawai, gaji_pokok, status, created_at, updated_at
+                )
+                VALUES (
+                    :id_pegawai, :gaji_pokok, 1, :now, :now
+                )
+            """), {
+                "id_pegawai": id_pegawai,
+                "gaji_pokok": gaji_pokok,
+                "now": now
+            })
+
+        # =========================
+        # 2. UPSERT KOMPONEN GAJI
+        # =========================
+        for item in komponen_gaji:
+
+            id_komponen = item.get("id_komponen")
+            nilai = item.get("nilai")
+
+            if id_komponen is None:
+                continue
+
+            # cek existing
+            id_existing = conn.execute(
+                text("""
+                    SELECT id
+                    FROM pegawai_gaji_komponen
+                    WHERE id_pegawai = :id_pegawai
+                      AND id_komponen = :id_komponen
+                      AND status = 1
+                    LIMIT 1
+                """),
+                {
+                    "id_pegawai": id_pegawai,
+                    "id_komponen": id_komponen
+                }
+            ).scalar()
+
+            if id_existing:
+                # UPDATE
+                conn.execute(text("""
+                    UPDATE pegawai_gaji_komponen
+                    SET
+                        nilai = :nilai,
+                        updated_at = :now
+                    WHERE id = :id
+                """), {
+                    "id": id_existing,
+                    "nilai": nilai,
+                    "now": now
+                })
+
+            else:
+                # INSERT
+                conn.execute(text("""
+                    INSERT INTO pegawai_gaji_komponen (
+                        id_pegawai, id_komponen, nilai, status, created_at
+                    )
+                    VALUES (
+                        :id_pegawai, :id_komponen, :nilai, 1, :now
+                    )
+                """), {
+                    "id_pegawai": id_pegawai,
+                    "id_komponen": id_komponen,
+                    "nilai": nilai,
+                    "now": now
+                })
 
 
 

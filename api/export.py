@@ -5,6 +5,7 @@ from flask_restx import Namespace, Resource
 from api.templates.pegawai_akun import render_pegawai_akun_pdf
 from api.templates.pegawai_lokasi_absensi import render_pegawai_lokasi_absensi_pdf
 from api.templates.pegawai_pendidikan import render_pegawai_pendidikan_pdf
+from api.templates.pegawai_gaji_pdf import render_pegawai_gaji_pdf
 from api.utils.decorator import measure_execution_time, role_required
 from api.reports.r_pegawai import *
 
@@ -80,6 +81,29 @@ class PegawaiPendidikanPdfResource(Resource):
         filename = f"Data Pendidikan Pegawai - {suffix}.pdf"
 
         return render_pegawai_pendidikan_pdf(
+            pegawai_rows=rows,
+            filename=filename
+        )
+        
+
+@export_ns.route("/report/gaji/pdf")
+class PegawaiGajiPdfResource(Resource):
+
+    @role_required("admin")
+    @measure_execution_time
+    def get(self):
+        """(admin) Export list gaji pegawai PDF"""
+
+        status = request.args.get("status")
+
+        rows = get_pegawai_gaji_report_filtered(
+            status_pegawai=status
+        )
+
+        suffix = status if status else "Semua"
+        filename = f"List Gaji Pegawai - {suffix}.pdf"
+
+        return render_pegawai_gaji_pdf(
             pegawai_rows=rows,
             filename=filename
         )

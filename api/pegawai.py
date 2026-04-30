@@ -69,6 +69,16 @@ pegawai_pendidikan_model = pegawai_ns.model("PegawaiPendidikan", {
     }
 )
 
+pegawai_gaji_model = pegawai_ns.model("PegawaiGaji", {
+    "gaji_pokok": fields.Float(required=True, description="Gaji pokok pegawai"),
+    "komponen_gaji": fields.List(fields.Nested(
+        pegawai_ns.model("KomponenGajiItem", {
+            "id_komponen": fields.Integer(required=True),
+            "nilai": fields.Float(required=True)
+        })
+    ), required=True)
+})
+
 upload_face_parser = reqparse.RequestParser()
 upload_face_parser.add_argument("file", type=FileStorage, location="files", required=True, help="File gambar wajah")
 
@@ -381,6 +391,49 @@ class PegawaiLokasiListResource(Resource):
         )
 
 
+@pegawai_ns.route("/gaji")
+class PegawaiGajiListResource(Resource):
+
+    @role_required("admin")
+    @measure_execution_time
+    def get(self):
+        """(admin) Get data gaji & komponen pegawai (TAB GAJI)"""
+
+        rows = get_pegawai_komponen_gaji()
+        result = {}
+
+        for row in rows:
+            id_pegawai = row["id_pegawai"]
+
+            if id_pegawai not in result:
+                result[id_pegawai] = {
+                    "id_pegawai": row["id_pegawai"],
+                    "nip": row["nip"],
+                    "nama_lengkap": row["nama_lengkap"],
+                    "tanggal_masuk": row["tanggal_masuk"],
+                    "status_pegawai": row["status_pegawai"],
+                    "gaji_pokok": row["gaji_pokok"],
+                    "komponen_gaji": []
+                }
+
+            result[id_pegawai]["komponen_gaji"].append({
+                "id_komponen": row["id_komponen"],
+                "kode": row["kode"],
+                "nama_komponen": row["nama_komponen"],
+                "tipe": row["tipe"],
+                "metode_hitung": row["metode_hitung"],
+                "nilai": row["nilai"]
+            })
+
+        final_result = list(result.values())
+
+        return success(
+            data=final_result,
+            message="List data gaji & komponen pegawai",
+            meta={"total": len(final_result)}
+        )
+        
+
 
 # ==================================================
 # REGISTER PEGAWAI BARU
@@ -550,6 +603,44 @@ class PegawaiUpdateRekeningResource(Resource):
 
         return success(
             message="Data rekening pegawai berhasil diperbarui"
+        )
+
+
+
+# ==================================================
+# UPSERT GAJI & KOMPONEN GAJI PEGAWAI
+# ==================================================
+@pegawai_ns.route("/update-gaji/<int:id_pegawai>")
+class PegawaiUpdateGajiResource(Resource):
+
+    @role_required("admin")
+    @pegawai_ns.expect(pegawai_gaji_model, validate=True)
+    @measure_execution_time
+    def put(self, id_pegawai):
+        """(admin) Update data gaji & komponen pegawai"""
+
+        body = request.get_json(silent=True) or {}
+
+        if not is_pegawai_exists(id_pegawai):
+            raise NotFoundError("Pegawai tidak ditemukan")
+
+        gaji_pokok = body.get("gaji_pokok")
+        komponen_gaji = body.get("komponen_gaji") or []
+
+        if gaji_pokok is None:
+            raise ValidationError("Gaji pokok wajib diisi")
+
+        if not isinstance(komponen_gaji, list):
+            raise ValidationError("Format komponen gaji tidak valid")
+
+        upsert_pegawai_gaji(
+            id_pegawai=id_pegawai,
+            gaji_pokok=gaji_pokok,
+            komponen_gaji=komponen_gaji
+        )
+
+        return success(
+            message="Data gaji & komponen pegawai berhasil diperbarui"
         )
 
 
