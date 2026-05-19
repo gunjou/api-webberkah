@@ -474,8 +474,8 @@ def hitung_upah_per_jam(
 
     total_bulanan = gaji_pokok + total_tunjangan
 
-    # pegawai tetap & magang → gaji bulanan
-    if id_status_pegawai in (1, 5):
+    # pegawai tetap, kontrak dan magang → gaji bulanan
+    if id_status_pegawai in (1, 3, 5):
         upah_harian = total_bulanan / Decimal(26)
     else:
         # pegawai tidak tetap → gaji sudah harian
