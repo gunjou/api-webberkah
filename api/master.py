@@ -1,5 +1,5 @@
 from flask_jwt_extended import get_jwt_identity, jwt_required
-from flask_restx import Namespace, Resource, fields
+from flask_restx import Namespace, Resource, fields, reqparse
 from flask import request
 from datetime import datetime
 
@@ -66,6 +66,9 @@ lembur_rule_model = master_ns.model("LemburRule", {
         "pengali": fields.Float(required=True, description="Pengali perhitungan lembur", example=1.5)
     }
 )
+
+hari_libur_parser = reqparse.RequestParser()
+hari_libur_parser.add_argument( "tahun", type=int, required=False, help="Filter berdasarkan tahun. Default: tahun sekarang")
 
 hari_libur_model = master_ns.model("HariLibur", {
         "tanggal": fields.String(required=True, description="Tanggal hari libur (YYYY-MM-DD)", example="2026-01-01"),
@@ -830,12 +833,27 @@ class LemburRuleDetailResource(Resource):
 @master_ns.route("/hari-libur")
 class HariLiburListResource(Resource):
 
+    @master_ns.expect(hari_libur_parser)
     @jwt_required()
     @measure_execution_time
     def get(self):
         """Akses: (admin, pegawai), Get list hari libur"""
-        data = get_hari_libur_list()
-        return success(data=data, message="List hari libur")
+
+        args = hari_libur_parser.parse_args()
+
+        # ambil parameter tahun
+        tahun = args.get("tahun")
+
+        # default tahun sekarang jika kosong
+        if not tahun:
+            tahun = datetime.now().year
+
+        data = get_hari_libur_list(tahun)
+
+        return success(
+            data=data,
+            message=f"List hari libur tahun {tahun}"
+        )
 
     @role_required("admin")
     @master_ns.expect(hari_libur_model, validate=True)

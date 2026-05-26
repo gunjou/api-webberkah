@@ -779,16 +779,27 @@ def delete_lembur_rule(id_rule: int):
 # ==================================================
 # REF HARI LIBUR
 # ==================================================
-def get_hari_libur_list():
+def get_hari_libur_list(tahun):
     sql = text("""
         SELECT
-            id_libur, tanggal, nama_libur, jenis, status, created_at, updated_at
+            id_libur,
+            tanggal,
+            nama_libur,
+            jenis,
+            status,
+            created_at,
+            updated_at
         FROM ref_hari_libur
         WHERE status = 1
+          AND EXTRACT(YEAR FROM tanggal) = :tahun
         ORDER BY tanggal ASC
     """)
+
     with engine.connect() as conn:
-        return conn.execute(sql).mappings().all()
+        return conn.execute(
+            sql,
+            {"tahun": tahun}
+        ).mappings().all()
 
 
 def get_hari_libur_by_id(id_libur: int):
