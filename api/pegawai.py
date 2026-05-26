@@ -178,7 +178,9 @@ class PegawaiBasicListResource(Resource):
     @measure_execution_time
     def get(self):
         """(admin) Get data basic pegawai (nama dan id)"""
+
         rows = get_pegawai_basic()
+
         result = []
 
         for row in rows:
@@ -189,6 +191,10 @@ class PegawaiBasicListResource(Resource):
                 "nama_panggilan": row["nama_panggilan"],
                 "jenis_kelamin": row["jenis_kelamin"],
                 "tanggal_masuk": row["tanggal_masuk"],
+
+                "jatah_cuti": row["jatah_cuti"],
+                "cuti_terpakai": row["cuti_terpakai"],
+                "sisa_cuti": row["sisa_cuti"],
             })
 
         return success(
@@ -892,4 +898,47 @@ class PegawaiAccountInfoResource(Resource):
                 "email": data["email"],
                 "username": data["username"]
             }
+        )
+
+
+@pegawai_ns.route("/cuti/me")
+class PegawaiMyCutiResource(Resource):
+
+    @jwt_required()
+    @role_required("pegawai")
+    @measure_execution_time
+    def get(self):
+        """Get sisa cuti pegawai login"""
+
+        id_pegawai = get_jwt_identity()
+        data = get_my_sisa_cuti(id_pegawai)
+
+        return success(
+            data=data,
+            message="Data sisa cuti pegawai"
+        )
+        
+
+
+# ====================================================================================================
+# ENDPOINT MANAGEMENT CUTI PEGAWAI
+# ====================================================================================================
+@pegawai_ns.route("/cuti/generate")
+class PegawaiGenerateCutiResource(Resource):
+
+    @jwt_required()
+    @role_required("admin")
+    @measure_execution_time
+    def post(self):
+        """
+        Generate saldo cuti pegawai tahunan
+        """
+
+        total_generate = generate_pegawai_cuti_tahunan()
+
+        return success(
+            data={
+                "total_generate": total_generate
+            },
+            message="Berhasil generate saldo cuti pegawai"
         )

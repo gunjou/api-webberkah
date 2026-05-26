@@ -134,11 +134,18 @@ def get_lokasi_absensi_by_pegawai(id_pegawai: int):
 def get_pegawai_basic():
     sql = text("""
         SELECT
-            p.id_pegawai, p.nip, p.nama_lengkap, p.nama_panggilan, p.jenis_kelamin, p.tanggal_masuk
+            p.id_pegawai, p.nip, p.nama_lengkap, p.nama_panggilan, p.jenis_kelamin, p.tanggal_masuk,
+            COALESCE(pc.jatah_cuti, 0) AS jatah_cuti,
+            COALESCE(pc.cuti_terpakai, 0) AS cuti_terpakai,
+            COALESCE(pc.sisa_cuti, 0) AS sisa_cuti
         FROM pegawai p
+        LEFT JOIN pegawai_cuti pc
+            ON pc.id_pegawai = p.id_pegawai
+            AND pc.tahun = EXTRACT(YEAR FROM CURRENT_DATE)::INT
         WHERE p.status = 1
         ORDER BY p.nama_lengkap ASC
     """)
+
     with engine.connect() as conn:
         return conn.execute(sql).mappings().fetchall()
 
@@ -931,3 +938,77 @@ def get_pegawai_account_info(id_pegawai: int):
         return conn.execute(
             sql, {"id_pegawai": id_pegawai}
         ).mappings().first()
+
+
+def get_my_sisa_cuti(id_pegawai: int):
+    sql = text("""
+        SELECT
+            p.id_pegawai,
+            p.nip,
+            p.nama_lengkap,
+            p.tanggal_masuk,
+            COALESCE(pc.tahun, EXTRACT(YEAR FROM CURRENT_DATE)::INT) AS tahun,
+            COALESCE(pc.jatah_cuti, 0) AS jatah_cuti,
+            COALESCE(pc.cuti_terpakai, 0) AS cuti_terpakai,
+            COALESCE(pc.sisa_cuti, 0) AS sisa_cuti
+        FROM pegawai p
+        LEFT JOIN pegawai_cuti pc
+            ON pc.id_pegawai = p.id_pegawai
+            AND pc.tahun = EXTRACT(YEAR FROM CURRENT_DATE)::INT
+        WHERE p.id_pegawai = :id_pegawai
+          AND p.status = 1
+        LIMIT 1
+    """)
+
+    with engine.connect() as conn:
+
+        result = conn.execute(sql, {
+            "id_pegawai": id_pegawai
+        }).mappings().first()
+
+        if not result:
+            raise NotFoundError("Data pegawai tidak ditemukan")
+
+        return {
+            "id_pegawai": result["id_pegawai"],
+            "nip": result["nip"],
+            "nama_lengkap": result["nama_lengkap"],
+            "tanggal_masuk": result["tanggal_masuk"],
+            "tahun": result["tahun"],
+            "jatah_cuti": result["jatah_cuti"],
+            "cuti_terpakai": result["cuti_terpakai"],
+            "sisa_cuti": result["sisa_cuti"]
+        }
+
+
+
+# ==================================================
+# GENERATE CUTI TAHUNAN PEGAWAI
+# ==================================================
+def generate_pegawai_cuti_tahunan():
+    sql = text("""
+        INSERT INTO pegawai_cuti (
+            id_pegawai, tahun, jatah_cuti, cuti_terpakai, sisa_cuti, status, created_at, updated_at
+        )
+        SELECT
+            p.id_pegawai,
+            EXTRACT(YEAR FROM CURRENT_DATE)::INT,
+            12,
+            0,
+            12,
+            1,
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
+        FROM pegawai p
+        WHERE p.status = 1
+          AND AGE(CURRENT_DATE, p.tanggal_masuk) >= INTERVAL '1 year'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM pegawai_cuti pc
+              WHERE pc.id_pegawai = p.id_pegawai
+                AND pc.tahun = EXTRACT(YEAR FROM CURRENT_DATE)::INT
+          )
+    """)
+    with engine.begin() as conn:
+        result = conn.execute(sql)
+        return result.rowcount

@@ -501,6 +501,30 @@ class IzinApproveResource(Resource):
         return success(message="Perizinan berhasil di-approve")
 
 
+@perizinan_ns.route("/<int:id_izin>/approve-cuti")
+class IzinApproveCutiResource(Resource):
+
+    @jwt_required()
+    @role_required("admin")
+    @measure_execution_time
+    def put(self, id_izin):
+        """(admin) Approve perizinan dan potong cuti"""
+
+        izin = get_izin_by_id(id_izin)
+
+        if not izin:
+            raise ValidationError("Data perizinan tidak ditemukan")
+
+        if izin["status_approval"] == "approved":
+            raise ValidationError("Perizinan sudah di-approve")
+
+        approve_izin_potong_cuti(id_izin)
+
+        return success(
+            message="Perizinan berhasil di-approve dan cuti berhasil dipotong"
+        )
+
+
 @perizinan_ns.route("/<int:id_izin>/rejected")
 class IzinRejectResource(Resource):
 

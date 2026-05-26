@@ -1,4 +1,5 @@
 from sqlalchemy import text
+from api.shared.exceptions import NotFoundError, ValidationError
 from api.utils.config import engine
 from api.shared.helper import get_wita
 
@@ -307,5 +308,140 @@ def update_izin_approval(
             "id": id_izin,
             "status_approval": status_approval,
             "alasan_penolakan": alasan_penolakan,
+            "now": get_wita()
+        })
+
+
+
+def approve_izin_potong_cuti(id_izin: int):
+
+    # ==================================================
+    # GET DATA IZIN + JENIS IZIN
+    # ==================================================
+    sql_izin = text("""
+        SELECT
+            i.id_izin,
+            i.id_pegawai,
+            i.tgl_mulai,
+            i.tgl_selesai,
+            i.status_approval,
+
+            (
+                (i.tgl_selesai::date - i.tgl_mulai::date) + 1
+            ) AS jumlah_hari,
+
+            rji.nama_izin,
+            rji.potong_cuti
+
+        FROM izin i
+
+        JOIN ref_jenis_izin rji
+            ON rji.id_jenis_izin = i.id_jenis_izin
+
+        WHERE i.id_izin = :id_izin
+          AND i.status = 1
+
+        LIMIT 1
+    """)
+
+    # ==================================================
+    # GET SALDO CUTI
+    # ==================================================
+    sql_cuti = text("""
+        SELECT
+            id_pegawai_cuti,
+            jatah_cuti,
+            cuti_terpakai,
+            sisa_cuti
+        FROM pegawai_cuti
+        WHERE id_pegawai = :id_pegawai
+          AND tahun = EXTRACT(YEAR FROM CURRENT_DATE)::INT
+          AND status = 1
+        LIMIT 1
+    """)
+
+    # ==================================================
+    # UPDATE APPROVAL IZIN
+    # ==================================================
+    sql_update_izin = text("""
+        UPDATE izin
+        SET
+            status_approval = 'approved',
+            alasan_penolakan = NULL,
+            updated_at = :now
+        WHERE id_izin = :id_izin
+    """)
+
+    # ==================================================
+    # UPDATE SALDO CUTI
+    # ==================================================
+    sql_update_cuti = text("""
+        UPDATE pegawai_cuti
+        SET
+            cuti_terpakai = cuti_terpakai + :jumlah_hari,
+            sisa_cuti = sisa_cuti - :jumlah_hari,
+            updated_at = :now
+        WHERE id_pegawai_cuti = :id_pegawai_cuti
+    """)
+
+    with engine.begin() as conn:
+
+        # ==============================================
+        # GET DATA IZIN
+        # ==============================================
+        izin = conn.execute(sql_izin, {
+            "id_izin": id_izin
+        }).mappings().first()
+
+        if not izin:
+            raise NotFoundError("Data perizinan tidak ditemukan")
+
+        if izin["status_approval"] == "approved":
+            raise ValidationError("Perizinan sudah di-approve")
+
+        jumlah_hari = izin["jumlah_hari"]
+
+        # ==============================================
+        # VALIDASI JUMLAH HARI
+        # ==============================================
+        if jumlah_hari <= 0:
+            raise ValidationError(
+                "Tanggal perizinan tidak valid"
+            )
+
+        # ==============================================
+        # GET SALDO CUTI
+        # ==============================================
+        cuti = conn.execute(sql_cuti, {
+            "id_pegawai": izin["id_pegawai"]
+        }).mappings().first()
+
+        if not cuti:
+            raise ValidationError(
+                "Pegawai belum memiliki saldo cuti"
+            )
+
+        # ==============================================
+        # VALIDASI SISA CUTI
+        # ==============================================
+        if cuti["sisa_cuti"] < jumlah_hari:
+            raise ValidationError(
+                "Sisa cuti pegawai tidak mencukupi"
+            )
+
+        # ==============================================
+        # APPROVE IZIN
+        # ==============================================
+        conn.execute(sql_update_izin, {
+            "id_izin": id_izin,
+            "now": get_wita()
+        })
+
+        # ==============================================
+        # POTONG CUTI
+        # ==============================================
+        conn.execute(sql_update_cuti, {
+            "id_pegawai_cuti": cuti["id_pegawai_cuti"],
+            "jumlah_hari": jumlah_hari,
             "now": get_wita()
         })
