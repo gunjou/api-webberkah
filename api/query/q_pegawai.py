@@ -166,7 +166,10 @@ def get_pegawai_profile():
             sp.nama_status AS status_pegawai, j.nama_jabatan, d.nama_departemen, lj.nama_level AS level_jabatan,
 
             pr.nik, pr.agama, pr.tempat_lahir, pr.tanggal_lahir, pr.status_nikah, pr.email_pribadi, pr.no_telepon, 
-            pr.alamat
+            pr.alamat,
+            COALESCE(pc.jatah_cuti, 0) AS jatah_cuti,
+            COALESCE(pc.cuti_terpakai, 0) AS cuti_terpakai,
+            COALESCE(pc.sisa_cuti, 0) AS sisa_cuti
 
         FROM pegawai p
         LEFT JOIN ref_status_pegawai sp
@@ -179,7 +182,10 @@ def get_pegawai_profile():
             ON lj.id_level_jabatan = p.id_level_jabatan
         LEFT JOIN pegawai_pribadi pr
             ON pr.id_pegawai = p.id_pegawai
-           AND pr.status = 1
+            AND pr.status = 1
+        LEFT JOIN pegawai_cuti pc
+            ON pc.id_pegawai = p.id_pegawai
+            AND pc.tahun = EXTRACT(YEAR FROM CURRENT_DATE)::INT
         WHERE p.status = 1
         ORDER BY p.nama_lengkap ASC, p.id_pegawai ASC
     """)

@@ -245,6 +245,10 @@ class PegawaiProfileListResource(Resource):
                 "email": row["email_pribadi"],
                 "no_telepon": row["no_telepon"],
                 "alamat": row["alamat"],
+                
+                "jatah_cuti": row["jatah_cuti"],
+                "cuti_terpakai": row["cuti_terpakai"],
+                "sisa_cuti": row["sisa_cuti"],
             })
 
         return success(
