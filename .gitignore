@@ -5,6 +5,9 @@
 deploy.sh
 AlurBisnis.md
 ListEndpoints.md
+skema_webberkah.sql
+endpoint_invoice.md
+PR.md
 
 ### Flask ###
 instance/*
