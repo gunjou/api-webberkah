@@ -1,37 +1,29 @@
 from flask import request
 from flask_jwt_extended import jwt_required
 from flask_restx import Namespace, Resource, reqparse
+from werkzeug.datastructures import FileStorage
 
 from api.shared.response import success
 from api.shared.exceptions import ValidationError, NotFoundError
 from api.utils.decorator import measure_execution_time
-from api.utils.uploader import upload_rcc_attachment_to_cdn
+from api.utils.uploader import upload_document_to_cdn
 from api.rcc.attachment.query import *
 
 
 attachment_ns = Namespace("attachments", description="Attachment Management")
 
 attachment_upload_parser = reqparse.RequestParser()
-attachment_upload_parser.add_argument("file", location="files", required=True, help="File attachment")
+attachment_upload_parser.add_argument("file", type=FileStorage, location="files", required=True, help="File attachment")
 attachment_upload_parser.add_argument("id_attachment_type", type=int, location="form", required=True, help="Jenis Attachment")
 attachment_upload_parser.add_argument("keterangan", type=str, location="form")
 
-@attachment_ns.route(
-    "/invoices/<int:id_invoice>/attachments"
-)
-class InvoiceAttachmentResource(
-    Resource
-):
-
+@attachment_ns.route("/invoices/<int:id_invoice>/attachments")
+class InvoiceAttachmentResource(Resource):
     @jwt_required()
-    @attachment_ns.expect(
-        attachment_upload_parser
-    )
+    @attachment_ns.doc(consumes=["multipart/form-data"])
+    @attachment_ns.expect(attachment_upload_parser)
     @measure_execution_time
-    def post(
-        self,
-        id_invoice
-    ):
+    def post(self, id_invoice):
         """Upload Attachment"""
 
         args = (
@@ -46,9 +38,9 @@ class InvoiceAttachmentResource(
                 "File wajib diupload"
             )
 
-        uploaded = upload_rcc_attachment_to_cdn(
+        uploaded = upload_document_to_cdn(
             file=file,
-            folder="rcc"
+            category="invoice"
         )
 
         data = create_attachment(
@@ -84,10 +76,7 @@ class InvoiceAttachmentResource(
 
     @jwt_required()
     @measure_execution_time
-    def get(
-        self,
-        id_invoice
-    ):
+    def get(self, id_invoice):
         """List Attachment"""
 
         data = get_attachment_list(
@@ -101,19 +90,11 @@ class InvoiceAttachmentResource(
 
 
 
-@attachment_ns.route(
-    "/<int:id_attachment>"
-)
-class AttachmentDetailResource(
-    Resource
-):
-
+@attachment_ns.route("/<int:id_attachment>")
+class AttachmentDetailResource(Resource):
     @jwt_required()
     @measure_execution_time
-    def get(
-        self,
-        id_attachment
-    ):
+    def get(self, id_attachment):
         """Detail Attachment"""
 
         data = get_attachment_by_id(
@@ -133,10 +114,7 @@ class AttachmentDetailResource(
 
     @jwt_required()
     @measure_execution_time
-    def delete(
-        self,
-        id_attachment
-    ):
+    def delete(self, id_attachment):
         """Delete Attachment"""
 
         existing = (

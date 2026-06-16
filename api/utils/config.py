@@ -10,6 +10,9 @@ load_dotenv()
 CDN_UPLOAD_URL = os.getenv("CDN_UPLOAD_URL")
 API_KEY_ABSENSI = os.getenv("API_KEY_ABSENSI")
 
+CDN_UPLOAD_DOCUMENT_URL = os.getenv("CDN_URL_WEBBERKAH_DOCUMENT")
+API_KEY_DOCUMENT = os.getenv("API_KEY_DOCUMENT")
+
 # === Konfigurasi Database === #
 host = os.getenv("DB_HOST", "localhost")
 port = os.getenv("DB_PORT", "5432")
