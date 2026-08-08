@@ -373,7 +373,7 @@ def get_pegawai_rekap(id_departemen=None, id_status_pegawai=None):
     """
 
     params = {
-        "excluded_ids": tuple([2, 9, 13, 29])
+        "excluded_ids": tuple([2, 4, 9, 13, 29])
     }
 
     if id_departemen:

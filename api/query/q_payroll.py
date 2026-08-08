@@ -13,7 +13,7 @@ from api.utils.config import engine
 JOB_STATUS = {}
 ACTIVE_JOB = None
 
-SPECIAL_PEGAWAI = {2, 8, 9, 13, 29}
+SPECIAL_PEGAWAI = {2, 4, 9, 13, 29}
 
 def is_pegawai_special(id_pegawai):
     return id_pegawai in SPECIAL_PEGAWAI
