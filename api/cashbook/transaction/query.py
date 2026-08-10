@@ -264,18 +264,19 @@ def get_balance_adjustments(opening_balances: list, date_from):
     }
 
 
-# ====================== #ANCHOR - TRANSACTION SUMMARY ======================= #
-
 # ====================== #ANCHOR - TRANSACTION SUMMARY =======================
 
 def get_transaction_summary(filters: dict):
 
     sql = """
         SELECT
+
+            -- Income tanpa transfer
             COALESCE(
                 SUM(
                     CASE
                         WHEN t.transaction_type = 'IN'
+                         AND t.id_category != :transfer_category_id
                         THEN t.amount
                         ELSE 0
                     END
@@ -283,10 +284,12 @@ def get_transaction_summary(filters: dict):
                 0
             ) AS total_income,
 
+            -- Outcome tanpa transfer
             COALESCE(
                 SUM(
                     CASE
                         WHEN t.transaction_type = 'OUT'
+                         AND t.id_category != :transfer_category_id
                         THEN t.amount
                         ELSE 0
                     END
@@ -294,23 +297,31 @@ def get_transaction_summary(filters: dict):
                 0
             ) AS total_outcome,
 
+            -- Cashflow tanpa transfer
             COALESCE(
                 SUM(
                     CASE
+                        WHEN t.id_category = :transfer_category_id
+                        THEN 0
+
                         WHEN t.transaction_type = 'IN'
                         THEN t.amount
+
                         ELSE -t.amount
                     END
                 ),
                 0
             ) AS cashflow,
 
+            -- Semua transaksi
             COUNT(*) AS total_transaction_count,
 
+            -- Khusus transfer
             COUNT(*) FILTER (
                 WHERE t.id_category = :transfer_category_id
             ) AS transfer_count,
 
+            -- Transaksi selain transfer
             COUNT(*) FILTER (
                 WHERE t.id_category != :transfer_category_id
             ) AS transaction_count
