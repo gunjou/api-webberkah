@@ -31,6 +31,12 @@ from api.rcc.payment import payment_ns
 from api.rcc.dashboard import rcc_dashboard_ns
 from api.rcc.eis import eis_ns
 
+from api.cashbook.account import ns as account_ns
+from api.cashbook.category import ns as category_ns
+from api.cashbook.transaction import ns as transaction_ns
+from api.cashbook.opening_balance import ns as opening_balance_ns
+from api.cashbook.dashboard import ns as cashbook_dashboard_ns
+
 app = Flask(__name__)
 CORS(app)
 
@@ -96,6 +102,11 @@ api.add_namespace(payment_ns, path="/api/payments")
 api.add_namespace(rcc_dashboard_ns, path="/api/rcc-dashboard")
 api.add_namespace(eis_ns, path="/api/eis")
 
+api.add_namespace(account_ns, path="/cashbook/accounts")
+api.add_namespace(category_ns, path="/cashbook/categories")
+api.add_namespace(transaction_ns, path="/cashbook/transactions")
+api.add_namespace(opening_balance_ns, path="/cashbook/opening-balance")
+api.add_namespace(cashbook_dashboard_ns, path="/cashbook/dashboard")
 
 # ==============================
 # GLOBAL ERROR HANDLER

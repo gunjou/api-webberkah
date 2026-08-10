@@ -12,8 +12,8 @@ from api.query.q_auth import *
 auth_ns = Namespace("auth", description="Authentication & Authorization")
 
 admin_login_model = auth_ns.model("AdminLoginRequest", {
-        "username": fields.String(required=True, description="Username admin", example="cobauser"),
-        "password": fields.String(required=True, description="Password admin", example="123456")
+        "username": fields.String(required=True, description="Username admin", example="admin"),
+        "password": fields.String(required=True, description="Password admin", example="admin")
     }
 )
 
@@ -67,14 +67,18 @@ class AdminLoginResource(Resource):
             identity=str(admin["id_admin"]),
             additional_claims={
                 "account_type": "admin",
-                "role": admin["role"]
+                "role": admin["role"],
+                "display_name": admin["display_name"],
+                "username": admin["username"]
             }
         )
         refresh_token = create_refresh_token(
         identity=str(admin["id_admin"]),
         additional_claims={
+                "account_type": "admin",
                 "role": admin["role"],
-                "account_type": "admin"
+                "display_name": admin["display_name"],
+                "username": admin["username"]
             }
         )
 
@@ -88,6 +92,7 @@ class AdminLoginResource(Resource):
                 "user": {
                     "id_admin": admin["id_admin"],
                     "username": admin["username"],
+                    "display_name": admin["display_name"],
                     "role": admin["role"]
                 }
             },

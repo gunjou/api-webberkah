@@ -8,7 +8,7 @@ from api.shared.helper import get_wita
 # ======================================
 def get_admin_by_username(username: str):
     sql = text("""
-        SELECT id_admin, username, password_hash, role, status
+        SELECT id_admin, username, display_name, password_hash, role, status
         FROM auth_admin
         WHERE username = :username
           AND status = 1
