@@ -1,5 +1,6 @@
 from sqlalchemy import text
 
+from api.cashbook.constants import TRANSFER_CATEGORY_ID
 from api.utils.config import engine
 from api.shared.helper import get_wita
 
@@ -265,6 +266,8 @@ def get_balance_adjustments(opening_balances: list, date_from):
 
 # ====================== #ANCHOR - TRANSACTION SUMMARY ======================= #
 
+# ====================== #ANCHOR - TRANSACTION SUMMARY =======================
+
 def get_transaction_summary(filters: dict):
 
     sql = """
@@ -302,18 +305,30 @@ def get_transaction_summary(filters: dict):
                 0
             ) AS cashflow,
 
-            COUNT(*) AS transaction_count
+            COUNT(*) AS total_transaction_count,
+
+            COUNT(*) FILTER (
+                WHERE t.id_category = :transfer_category_id
+            ) AS transfer_count,
+
+            COUNT(*) FILTER (
+                WHERE t.id_category != :transfer_category_id
+            ) AS transaction_count
 
         FROM transactions t
+
         INNER JOIN categories c
             ON c.id_category = t.id_category
            AND c.is_reportable = 1
+
         WHERE
             t.is_active = 1
     """
 
-    params = {}
-    
+    params = {
+        "transfer_category_id": TRANSFER_CATEGORY_ID
+    }
+
     if filters.get("date_from"):
         sql += """
             AND t.transaction_date >= :date_from
@@ -361,7 +376,10 @@ def get_transaction_summary(filters: dict):
         params["search"] = f"%{filters['search']}%"
 
     with engine.connect() as conn:
-        return conn.execute(text(sql), params).mappings().first()
+        return conn.execute(
+            text(sql),
+            params
+        ).mappings().first()
 
 
 # ======================== #ANCHOR - DETAIL TRANSACTION ====================== #
