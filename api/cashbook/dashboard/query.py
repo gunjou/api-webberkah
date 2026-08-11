@@ -1,6 +1,8 @@
 # api/cashbook/dashboard/query.py
 from sqlalchemy import text
+
 from api.utils.config import engine
+from api.cashbook.constants import TRANSFER_CATEGORY_ID
 
 
 def get_dashboard_summary(filters: dict):
@@ -12,13 +14,16 @@ def get_dashboard_summary(filters: dict):
             COALESCE(SUM(CASE WHEN t.transaction_type='IN' THEN t.amount ELSE -t.amount END),0) net_cashflow
         FROM transactions t
         INNER JOIN categories c ON c.id_category=t.id_category AND c.is_reportable=1
-        WHERE t.is_active=1
-          AND t.transaction_date BETWEEN :date_from AND :date_to
+        WHERE
+            t.is_active = 1
+            AND t.id_category != :transfer_category_id
+            AND t.transaction_date BETWEEN :date_from AND :date_to
     """
 
     params = {
+        "transfer_category_id": TRANSFER_CATEGORY_ID,
         "date_from": filters["date_from"],
-        "date_to": filters["date_to"]
+        "date_to": filters["date_to"],
     }
 
     if filters.get("id_account"):
@@ -111,11 +116,14 @@ def get_dashboard_cashflow(filters: dict):
         INNER JOIN categories c
             ON c.id_category = t.id_category
             AND c.is_reportable = 1
-        WHERE t.is_active = 1
+        WHERE
+            t.is_active = 1
+            AND t.id_category != :transfer_category_id
             AND t.transaction_date BETWEEN :date_from AND :date_to
     """
 
     params = {
+        "transfer_category_id": TRANSFER_CATEGORY_ID,
         "date_from": filters["date_from"],
         "date_to": filters["date_to"],
     }

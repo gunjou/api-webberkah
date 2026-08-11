@@ -2,6 +2,7 @@
 from sqlalchemy import text
 
 from api.utils.config import engine
+from api.shared.helper import get_wita
 
 
 # ============================================================================ #
@@ -91,6 +92,8 @@ def create_account(
             branch_name,
             account_number,
             account_holder,
+            created_at,
+            updated_at,
             created_by
         )
         VALUES
@@ -102,6 +105,8 @@ def create_account(
             :branch_name,
             :account_number,
             :account_holder,
+            :now,
+            :now,
             :created_by
         )
         RETURNING id_account
@@ -119,6 +124,7 @@ def create_account(
                 "branch_name": branch_name,
                 "account_number": account_number,
                 "account_holder": account_holder,
+                "now": get_wita(),
                 "created_by": created_by
             }
         )
@@ -150,7 +156,7 @@ def update_account(
             account_number = :account_number,
             account_holder = :account_holder,
             updated_by = :updated_by,
-            updated_at = CURRENT_TIMESTAMP
+            updated_at = :now
         WHERE
             id_account = :id_account
             AND is_active = 1
@@ -170,7 +176,8 @@ def update_account(
                 "branch_name": branch_name,
                 "account_number": account_number,
                 "account_holder": account_holder,
-                "updated_by": updated_by
+                "updated_by": updated_by,
+                "now": get_wita()
             }
         )
 
@@ -188,7 +195,7 @@ def delete_account(
         SET
             is_active = 0,
             deleted_by = :deleted_by,
-            deleted_at = CURRENT_TIMESTAMP
+            deleted_at = :now
         WHERE
             id_account = :id_account
             AND is_active = 1
@@ -200,7 +207,8 @@ def delete_account(
             sql,
             {
                 "id_account": id_account,
-                "deleted_by": deleted_by
+                "deleted_by": deleted_by,
+                "now": get_wita()
             }
         )
 

@@ -2,6 +2,7 @@
 from datetime import datetime
 
 from api.shared.exceptions import ValidationError, NotFoundError
+from api.shared.helper import get_wita
 from .query import *
 
 
@@ -159,7 +160,9 @@ def generate_opening_balance_service(body: dict):
                 "effective_date": body["effective_date"],
                 "opening_balance": opening_balance + movement,
                 "notes": body.get("notes"),
-                "created_by": body["created_by"]
+                "created_by": body["created_by"],
+                "created_at": get_wita(),
+                "updated_at": get_wita()
             })
 
         bulk_create_opening_balance(

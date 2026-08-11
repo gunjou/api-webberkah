@@ -1,6 +1,8 @@
 # api/cashbook/opening_balance/query.py
 from sqlalchemy import text
+
 from api.utils.config import engine
+from api.shared.helper import get_wita
 
 
 # ============================================================================ #
@@ -97,9 +99,9 @@ def create_opening_balance(
 
     sql = text("""
         INSERT INTO opening_balances
-            (id_account, effective_date, opening_balance, notes, created_by)
+            (id_account, effective_date, opening_balance, notes, created_by, created_at, updated_at)
         VALUES
-            (:id_account, :effective_date, :opening_balance, :notes, :created_by)
+            (:id_account, :effective_date, :opening_balance, :notes, :created_by, :now, :now)
         RETURNING id_opening_balance
     """)
 
@@ -111,7 +113,8 @@ def create_opening_balance(
                 "effective_date": body["effective_date"],
                 "opening_balance": body["opening_balance"],
                 "notes": body.get("notes"),
-                "created_by": body["created_by"]
+                "created_by": body["created_by"],
+                "now" : get_wita()
             }
         )
 
@@ -264,7 +267,7 @@ def update_opening_balance(id_opening_balance: int, body: dict):
             opening_balance = :opening_balance,
             notes = :notes,
             updated_by = :updated_by,
-            updated_at = CURRENT_TIMESTAMP
+            updated_at = :now
         WHERE
             id_opening_balance = :id_opening_balance
             AND is_active = 1
@@ -279,7 +282,8 @@ def update_opening_balance(id_opening_balance: int, body: dict):
                 "effective_date": body["effective_date"],
                 "opening_balance": body["opening_balance"],
                 "notes": body.get("notes"),
-                "updated_by": body["updated_by"]
+                "updated_by": body["updated_by"],
+                "now" : get_wita()
             }
         )
 
@@ -444,9 +448,9 @@ def bulk_create_opening_balance(conn, opening_balances: list):
 
     sql = text("""
         INSERT INTO opening_balances
-            (id_account, effective_date, opening_balance, notes, created_by)
+            (id_account, effective_date, opening_balance, notes, created_by, created_at, updated_at)
         VALUES
-            (:id_account, :effective_date, :opening_balance, :notes, :created_by)
+            (:id_account, :effective_date, :opening_balance, :notes, :created_by, :created_at, :updated_at)
     """)
 
     conn.execute(sql, opening_balances)

@@ -2,6 +2,8 @@
 from sqlalchemy import text
 
 from api.utils.config import engine
+from api.shared.helper import get_wita
+from api.cashbook.constants import TRANSFER_CATEGORY_ID
 
 
 # ============================================================================ #
@@ -14,13 +16,13 @@ def get_category_list():
     sql = text("""
         SELECT id_category, name, description, created_at, updated_at
         FROM categories
-        WHERE is_active = 1 AND is_reportable = 1
+        WHERE is_active = 1 AND is_reportable = 1 AND id_category != :transfer_category_id
         ORDER BY
             id_category ASC
     """)
 
     with engine.connect() as conn:
-        return conn.execute(sql).mappings().all()
+        return conn.execute(sql, {"transfer_category_id": TRANSFER_CATEGORY_ID}).mappings().all()
 
 
 # ========================= #ANCHOR - DETAIL CATEGORY ======================== #
@@ -50,8 +52,8 @@ def create_category(
 ):
 
     sql = text("""
-        INSERT INTO categories (name, description) 
-        VALUES (:name, :description )
+        INSERT INTO categories (name, description, created_at, updated_at) 
+        VALUES (:name, :description, :now, :now)
         RETURNING id_category
     """)
 
@@ -61,7 +63,8 @@ def create_category(
             sql,
             {
                 "name": name,
-                "description": description
+                "description": description,
+                "now": get_wita()
             }
         )
 
@@ -80,7 +83,7 @@ def update_category(
         SET
             name = :name,
             description = :description,
-            updated_at = CURRENT_TIMESTAMP
+            updated_at = :now
         WHERE
             id_category = :id_category
             AND is_active = 1
@@ -93,7 +96,8 @@ def update_category(
             {
                 "id_category": id_category,
                 "name": name,
-                "description": description
+                "description": description,
+                "now": get_wita()
             }
         )
 
@@ -109,7 +113,7 @@ def delete_category(
         UPDATE categories
         SET
             is_active = 0,
-            updated_at = CURRENT_TIMESTAMP
+            updated_at = :now
         WHERE
             id_category = :id_category
             AND is_active = 1
@@ -120,7 +124,8 @@ def delete_category(
         result = conn.execute(
             sql,
             {
-                "id_category": id_category
+                "id_category": id_category,
+                "now": get_wita()
             }
         )
 

@@ -3,6 +3,7 @@ import calendar
 
 from api.cashbook.constants import TRANSFER_CATEGORY_ID
 from api.shared.exceptions import ValidationError
+from api.shared.helper import get_wita
 from api.utils.config import engine
 from .query import *
 
@@ -253,7 +254,9 @@ def bulk_create_transaction_service(
             "transaction_description": item["transaction_description"],
             "reference_number": item.get("reference_number"),
             "attachment_url": item.get("attachment_url"),
-            "created_by": created_by
+            "created_by": created_by,
+            "created_at": get_wita(),
+            "updated_at": get_wita()
         })
 
     return bulk_create_transaction(transactions)
@@ -338,7 +341,9 @@ def account_transfer_service(
                 "transaction_description": fee["description"],
                 "reference_number": body.get("reference_number"),
                 "attachment_url": body.get("attachment_url"),
-                "created_by": created_by
+                "created_by": created_by,
+                "created_at": get_wita(),
+                "updated_at": get_wita()
             })
 
         bulk_create_transactions(

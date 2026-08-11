@@ -469,7 +469,8 @@ def create_transaction(
             reference_number,
             attachment_url,
             created_by,
-            created_at
+            created_at,
+            updated_at
         )
         VALUES
         (
@@ -482,6 +483,7 @@ def create_transaction(
             :reference_number,
             :attachment_url,
             :created_by,
+            :now,
             :now
         )
         RETURNING
@@ -495,7 +497,8 @@ def create_transaction(
             reference_number,
             attachment_url,
             created_by,
-            created_at
+            created_at,
+            updated_at
     """)
 
     with engine.begin() as conn:
@@ -633,7 +636,9 @@ def bulk_create_transaction(
             transaction_description,
             reference_number,
             attachment_url,
-            created_by
+            created_by,
+            created_at,
+            updated_at
         )
         VALUES
         (
@@ -645,7 +650,9 @@ def bulk_create_transaction(
             :transaction_description,
             :reference_number,
             :attachment_url,
-            :created_by
+            :created_by,
+            :created_at,
+            :updated_at
         )
     """)
 
@@ -707,8 +714,10 @@ def bulk_create_transactions(
             amount,
             transaction_description,
             reference_number,
-             attachment_url,
-            created_by
+            attachment_url,
+            created_by,
+            created_at,
+            updated_ay
         )
         VALUES
         (
@@ -720,7 +729,9 @@ def bulk_create_transactions(
             :transaction_description,
             :reference_number,
             :attachment_url,
-            :created_by
+            :created_by,
+            :created_at,
+            :updated_at
         )
     """)
 
