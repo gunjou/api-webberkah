@@ -196,11 +196,13 @@ def get_dashboard_expense_category(filters: dict):
             ON c.id_category = t.id_category
             AND c.is_reportable = 1
         WHERE t.is_active = 1
+            AND t.id_category != :transfer_category_id
             AND t.transaction_type = 'OUT'
             AND t.transaction_date BETWEEN :date_from AND :date_to
     """
 
     params = {
+        "transfer_category_id": TRANSFER_CATEGORY_ID,
         "date_from": filters["date_from"],
         "date_to": filters["date_to"],
     }
@@ -238,11 +240,13 @@ def get_dashboard_expense_account(filters: dict):
             ON c.id_category = t.id_category
             AND c.is_reportable = 1
         WHERE t.is_active = 1
+            AND t.id_category != :transfer_category_id
             AND t.transaction_type = 'OUT'
             AND t.transaction_date BETWEEN :date_from AND :date_to
     """
 
     params = {
+        "transfer_category_id": TRANSFER_CATEGORY_ID,
         "date_from": filters["date_from"],
         "date_to": filters["date_to"],
     }
