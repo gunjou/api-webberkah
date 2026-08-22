@@ -24,13 +24,6 @@ from api.hutang import hutang_ns
 from api.payroll import payroll_ns
 from api.leaderboard import leaderboard_ns
 
-from api.rcc.client import client_ns
-from api.rcc.invoice import invoice_ns
-from api.rcc.attachment import attachment_ns
-from api.rcc.payment import payment_ns
-from api.rcc.dashboard import rcc_dashboard_ns
-from api.rcc.eis import eis_ns
-
 from api.cashbook.account import ns as account_ns
 from api.cashbook.category import ns as category_ns
 from api.cashbook.transaction import ns as transaction_ns
@@ -94,13 +87,6 @@ api.add_namespace(dashboard_ns, path="/dashboard")
 api.add_namespace(hutang_ns, path="/hutang")
 api.add_namespace(payroll_ns, path="/payroll")
 api.add_namespace(leaderboard_ns, path="/leaderboard")
-
-api.add_namespace(client_ns, path="/api/clients")
-api.add_namespace(invoice_ns, path="/api/invoices")
-api.add_namespace(attachment_ns, path="/api/attachments")
-api.add_namespace(payment_ns, path="/api/payments")
-api.add_namespace(rcc_dashboard_ns, path="/api/rcc-dashboard")
-api.add_namespace(eis_ns, path="/api/eis")
 
 api.add_namespace(account_ns, path="/cashbook/accounts")
 api.add_namespace(category_ns, path="/cashbook/categories")
