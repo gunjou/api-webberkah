@@ -308,7 +308,9 @@ def account_transfer_service(
             "transaction_description": body["description"],
             "reference_number": body.get("reference_number"),
             "attachment_url": body.get("attachment_url"),
-            "created_by": created_by
+            "created_by": created_by,
+            "created_at": get_wita(),
+            "updated_at": get_wita()
         })
 
         # Transfer Masuk
@@ -322,7 +324,9 @@ def account_transfer_service(
             "transaction_description": body["description"],
             "reference_number": body.get("reference_number"),
             "attachment_url": body.get("attachment_url"),
-            "created_by": created_by
+            "created_by": created_by,
+            "created_at": get_wita(),
+            "updated_at": get_wita()
         })
 
         # Optional Fees

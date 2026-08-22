@@ -717,7 +717,7 @@ def bulk_create_transactions(
             attachment_url,
             created_by,
             created_at,
-            updated_ay
+            updated_by
         )
         VALUES
         (
