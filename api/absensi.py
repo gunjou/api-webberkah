@@ -43,36 +43,84 @@ absensi_bulanan_parser.add_argument("tahun", type=int, required=False, help="Tah
 def validate_lokasi_absensi(id_pegawai: int, latitude: float, longitude: float) -> dict:
     """
     Validasi lokasi absensi:
-    - Lokasi fisik → radius + akses pegawai
-    - Jika gagal → cek WFH
+    - Pegawai hanya dievaluasi terhadap lokasi yang memang boleh digunakan
+    - Jika di luar radius → tampilkan lokasi terdekat + jarak
+    - Jika tidak masuk lokasi fisik → cek WFH
     """
 
-    # 1️⃣ Ambil semua lokasi aktif
+    # 1. Ambil lokasi yang boleh digunakan pegawai
+    allowed_lokasi_ids = get_allowed_lokasi_ids_pegawai(
+        id_pegawai
+    )
+
+    # 2. Ambil semua lokasi aktif
     all_lokasi = get_all_lokasi_absensi()
 
-    lokasi_valid = find_valid_lokasi(latitude=latitude, longitude=longitude, lokasi_list=all_lokasi)
+    # 3. Cari lokasi terdekat dari lokasi yang memang
+    #    diperbolehkan untuk pegawai
+    lokasi_result = find_valid_lokasi(
+        latitude=latitude,
+        longitude=longitude,
+        lokasi_list=all_lokasi,
+        allowed_lokasi_ids=allowed_lokasi_ids
+    )
 
-    # 2️⃣ Jika lokasi fisik TIDAK valid → cek WFH
-    if not lokasi_valid:
+    # =====================================================
+    # 4. TIDAK ADA LOKASI YANG BOLEH DIGUNAKAN
+    # =====================================================
+    if lokasi_result is None:
+
         if is_pegawai_wfh(id_pegawai):
             return {
                 "id_lokasi": os.getenv("ID_LOKASI_WFH"),
                 "nama_lokasi": "WFH",
                 "is_wfh": True
             }
-        raise ValidationError("Anda tidak berada di lokasi absensi yang diizinkan")
 
-    # 3️⃣ Lokasi fisik valid → cek akses pegawai
-    allowed_lokasi_ids = get_allowed_lokasi_ids_pegawai(id_pegawai)
-
-    if lokasi_valid["id_lokasi"] not in allowed_lokasi_ids:
         raise ValidationError(
-            f"Anda berada di {lokasi_valid['nama_lokasi']}, "
-            "namun tidak terdaftar di lokasi tersebut"
+            "Anda belum memiliki lokasi absensi yang terdaftar"
         )
 
-    lokasi_valid["is_wfh"] = False
-    return lokasi_valid
+    # =====================================================
+    # 5. BERADA DALAM RADIUS
+    # =====================================================
+    if "terdekat" not in lokasi_result:
+
+        lokasi_result["is_wfh"] = False
+
+        return lokasi_result
+
+    # =====================================================
+    # 6. DI LUAR RADIUS
+    # =====================================================
+    lokasi_terdekat = lokasi_result["terdekat"]
+
+    nama_lokasi = lokasi_terdekat["nama_lokasi"]
+    jarak = lokasi_terdekat["jarak"]
+    radius = lokasi_terdekat["radius_meter"]
+    jarak_di_luar = lokasi_terdekat["jarak_di_luar_radius"]
+
+    # =====================================================
+    # 7. CEK WFH
+    # =====================================================
+    if is_pegawai_wfh(id_pegawai):
+        return {
+            "id_lokasi": os.getenv("ID_LOKASI_WFH"),
+            "nama_lokasi": "WFH",
+            "is_wfh": True
+        }
+
+    # =====================================================
+    # 8. ERROR DETAIL
+    # =====================================================
+    raise ValidationError(
+        f"Anda berada di luar radius absensi. "
+        f"Lokasi terdekat: {nama_lokasi}. "
+        f"Jarak Anda ke {nama_lokasi} {jarak:.0f} meter "
+    )
+        # f"(radius maksimal {radius} meter). "
+        # f"Silakan mendekat sekitar "
+        # f"{jarak_di_luar:.2f} meter."
 
 def get_tanggal_absensi(now, jam_mulai_shift):
     """
