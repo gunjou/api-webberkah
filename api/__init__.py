@@ -6,6 +6,7 @@ from flask_cors import CORS
 from flask_restx import Api
 from dotenv import load_dotenv
 from flask_jwt_extended import JWTManager
+from jwt.exceptions import ExpiredSignatureError
 
 from api.shared.exceptions import AppError
 
@@ -136,6 +137,15 @@ def revoked_token_callback(jwt_header, jwt_payload):
         "success": False,
         "message": "Token telah dicabut",
         "code": "TOKEN_REVOKED"
+    }, 401
+
+
+@app.errorhandler(ExpiredSignatureError)
+def handle_expired_signature(error):
+    return {
+        "success": False,
+        "message": "Token expired",
+        "code": "TOKEN_EXPIRED"
     }, 401
 
 
