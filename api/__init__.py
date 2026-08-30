@@ -37,6 +37,16 @@ from api.work_item.master import ns as work_item_master_ns
 app = Flask(__name__)
 CORS(app)
 
+
+@app.errorhandler(ExpiredSignatureError)
+def handle_expired_signature(error):
+    return {
+        "success": False,
+        "message": "Token expired",
+        "code": "TOKEN_EXPIRED",
+        "errors": None
+    }, 401
+
 # ==============================
 # JWT CONFIG
 # ==============================
