@@ -12,8 +12,8 @@ from api.query.q_auth import *
 auth_ns = Namespace("auth", description="Authentication & Authorization")
 
 admin_login_model = auth_ns.model("AdminLoginRequest", {
-        "username": fields.String(required=True, description="Username admin", example="admin"),
-        "password": fields.String(required=True, description="Password admin", example="admin")
+        "username": fields.String(required=True, description="Username admin", example="cobauser"),
+        "password": fields.String(required=True, description="Password admin", example="aniki")
     }
 )
 

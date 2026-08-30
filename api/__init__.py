@@ -1,3 +1,4 @@
+# api/__init__.py
 import os
 from datetime import timedelta
 from flask import Flask
@@ -30,6 +31,8 @@ from api.cashbook.transaction import ns as transaction_ns
 from api.cashbook.opening_balance import ns as opening_balance_ns
 from api.cashbook.dashboard import ns as cashbook_dashboard_ns
 
+from api.work_item.master import ns as work_item_master_ns
+
 app = Flask(__name__)
 CORS(app)
 
@@ -44,7 +47,7 @@ app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(
     days=int(os.getenv("JWT_REFRESH_EXPIRES", 7))
 )
 
-JWTManager(app)
+jwt = JWTManager(app)
 
 # ==============================
 # SWAGGER AUTH CONFIG
@@ -93,6 +96,48 @@ api.add_namespace(category_ns, path="/cashbook/categories")
 api.add_namespace(transaction_ns, path="/cashbook/transactions")
 api.add_namespace(opening_balance_ns, path="/cashbook/opening-balance")
 api.add_namespace(cashbook_dashboard_ns, path="/cashbook/dashboard")
+
+api.add_namespace(work_item_master_ns, path="/work-item/master")
+
+
+# ==============================
+# JWT ERROR HANDLERS
+# ==============================
+@jwt.expired_token_loader
+def expired_token_callback(jwt_header, jwt_payload):
+    return {
+        "success": False,
+        "message": "Token expired",
+        "code": "TOKEN_EXPIRED"
+    }, 401
+
+
+@jwt.invalid_token_loader
+def invalid_token_callback(error):
+    return {
+        "success": False,
+        "message": "Token tidak valid",
+        "code": "INVALID_TOKEN"
+    }, 401
+
+
+@jwt.unauthorized_loader
+def missing_token_callback(error):
+    return {
+        "success": False,
+        "message": "Token tidak ditemukan",
+        "code": "TOKEN_MISSING"
+    }, 401
+
+
+@jwt.revoked_token_loader
+def revoked_token_callback(jwt_header, jwt_payload):
+    return {
+        "success": False,
+        "message": "Token telah dicabut",
+        "code": "TOKEN_REVOKED"
+    }, 401
+
 
 # ==============================
 # GLOBAL ERROR HANDLER
