@@ -6,6 +6,7 @@ from flask_cors import CORS
 from flask_restx import Api
 from dotenv import load_dotenv
 from flask_jwt_extended import JWTManager
+from flask_jwt_extended.exceptions import JWTExtendedException
 from jwt.exceptions import ExpiredSignatureError
 
 from api.shared.exceptions import AppError
@@ -37,16 +38,6 @@ from api.work_item.master import ns as work_item_master_ns
 app = Flask(__name__)
 CORS(app)
 
-
-@app.errorhandler(ExpiredSignatureError)
-def handle_expired_signature(error):
-    return {
-        "success": False,
-        "message": "Token expired",
-        "code": "TOKEN_EXPIRED",
-        "errors": None
-    }, 401
-
 # ==============================
 # JWT CONFIG
 # ==============================
@@ -59,6 +50,50 @@ app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(
 )
 
 jwt = JWTManager(app)
+
+
+# =====================================================
+# JWT ERROR HANDLERS
+# =====================================================
+@jwt.expired_token_loader
+def expired_token_callback(jwt_header, jwt_payload):
+    return {
+        "success": False,
+        "message": "Token expired",
+        "code": "TOKEN_EXPIRED",
+        "errors": None
+    }, 401
+
+
+@jwt.invalid_token_loader
+def invalid_token_callback(error):
+    return {
+        "success": False,
+        "message": "Token tidak valid",
+        "code": "INVALID_TOKEN",
+        "errors": None
+    }, 401
+
+
+@jwt.unauthorized_loader
+def missing_token_callback(error):
+    return {
+        "success": False,
+        "message": "Token tidak ditemukan",
+        "code": "TOKEN_MISSING",
+        "errors": None
+    }, 401
+
+
+@jwt.revoked_token_loader
+def revoked_token_callback(jwt_header, jwt_payload):
+    return {
+        "success": False,
+        "message": "Token telah dicabut",
+        "code": "TOKEN_REVOKED",
+        "errors": None
+    }, 401
+
 
 # ==============================
 # SWAGGER AUTH CONFIG
@@ -86,6 +121,20 @@ api = Api(
     security="Bearer Auth"
 )
 
+
+# =====================================================
+# FLASK-RESTX JWT ERROR HANDLER
+# =====================================================
+@api.errorhandler(ExpiredSignatureError)
+def handle_expired_signature(error):
+    return {
+        "success": False,
+        "message": "Token expired",
+        "code": "TOKEN_EXPIRED",
+        "errors": None
+    }, 401
+
+
 # ==============================
 # REGISTER NAMESPACES
 # ==============================
@@ -112,50 +161,15 @@ api.add_namespace(work_item_master_ns, path="/work-item/master")
 
 
 # ==============================
-# JWT ERROR HANDLERS
+# JWT ERROR HANDLER
 # ==============================
-@jwt.expired_token_loader
-def expired_token_callback(jwt_header, jwt_payload):
+@api.errorhandler(JWTExtendedException)
+def handle_jwt_error(error):
     return {
         "success": False,
-        "message": "Token expired",
-        "code": "TOKEN_EXPIRED"
-    }, 401
-
-
-@jwt.invalid_token_loader
-def invalid_token_callback(error):
-    return {
-        "success": False,
-        "message": "Token tidak valid",
-        "code": "INVALID_TOKEN"
-    }, 401
-
-
-@jwt.unauthorized_loader
-def missing_token_callback(error):
-    return {
-        "success": False,
-        "message": "Token tidak ditemukan",
-        "code": "TOKEN_MISSING"
-    }, 401
-
-
-@jwt.revoked_token_loader
-def revoked_token_callback(jwt_header, jwt_payload):
-    return {
-        "success": False,
-        "message": "Token telah dicabut",
-        "code": "TOKEN_REVOKED"
-    }, 401
-
-
-@app.errorhandler(ExpiredSignatureError)
-def handle_expired_signature(error):
-    return {
-        "success": False,
-        "message": "Token expired",
-        "code": "TOKEN_EXPIRED"
+        "message": str(error),
+        "code": "JWT_ERROR",
+        "errors": None
     }, 401
 
 
