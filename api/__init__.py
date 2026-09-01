@@ -35,6 +35,8 @@ from api.cashbook.dashboard import ns as cashbook_dashboard_ns
 
 from api.work_item.master import ns as work_item_master_ns
 
+from api.purchase_request import ns as purchase_request_ns
+
 app = Flask(__name__)
 CORS(app)
 
@@ -158,6 +160,8 @@ api.add_namespace(opening_balance_ns, path="/cashbook/opening-balance")
 api.add_namespace(cashbook_dashboard_ns, path="/cashbook/dashboard")
 
 api.add_namespace(work_item_master_ns, path="/work-item/master")
+
+api.add_namespace(purchase_request_ns, path="/purchase-requests")
 
 
 # ==============================
