@@ -405,3 +405,32 @@ class PurchaseRequestHistoryResource(Resource):
         )
 
 # ================== #!SECTION - REQUEST HISTORY ============================= #
+
+
+
+# ============================================================================ #
+#                     #SECTION - USER DASHBOARD                                #
+# ============================================================================ #
+
+# ======================= #ANCHOR - MY SUMMARY =============================== #
+
+@ns.route("/my-summary")
+class PurchaseRequestMySummaryResource(Resource):
+
+    @jwt_required()
+    @measure_execution_time
+    def get(self):
+        """Dashboard Purchase Request User"""
+
+        id_pegawai = int(get_jwt_identity())
+
+        data = get_my_purchase_request_summary_service(
+            id_pegawai=id_pegawai
+        )
+
+        return success(
+            data=data,
+            message="Dashboard purchase request berhasil diambil."
+        )
+
+# ==================== #!SECTION - USER DASHBOARD ============================ #

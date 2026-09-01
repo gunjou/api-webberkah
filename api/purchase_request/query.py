@@ -737,3 +737,89 @@ def get_purchase_request_history(id_request: int):
         ).mappings().all()
 
 # ================== #!SECTION - PURCHASE REQUEST HISTORY ==================== #
+
+
+
+# ============================================================================ #
+#                     #SECTION - USER DASHBOARD                                #
+# ============================================================================ #
+
+# ======================= #ANCHOR - MY SUMMARY =============================== #
+
+def get_purchase_request_dashboard_summary(id_pegawai: int):
+
+    sql = text("""
+        SELECT
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE status = 'REQUESTED') AS requested,
+            COUNT(*) FILTER (WHERE status = 'REVIEWED') AS reviewed,
+            COUNT(*) FILTER (WHERE status = 'APPROVED') AS approved,
+            COUNT(*) FILTER (WHERE status = 'REJECTED') AS rejected,
+            COUNT(*) FILTER (WHERE status = 'PAID') AS paid
+        FROM purchase_requests
+        WHERE
+            id_pegawai = :id_pegawai
+            AND is_active = 1
+    """)
+
+    with engine.connect() as conn:
+        return dict(
+            conn.execute(
+                sql,
+                {"id_pegawai": id_pegawai}
+            ).mappings().first()
+        )
+
+
+def get_purchase_request_dashboard_list(id_pegawai: int):
+
+    sql = text("""
+        SELECT
+            pr.id_request,
+            pr.request_number,
+            pr.nama_pekerjaan,
+            pr.tanggal_request,
+            pr.total_amount,
+            pr.status,
+            pr.priority,
+
+            COALESCE(
+                json_agg(
+                    json_build_object(
+                        'status', h.status,
+                        'nama_pegawai', h.nama_pegawai,
+                        'tanggal', h.created_at
+                    )
+                    ORDER BY h.created_at ASC
+                ) FILTER (WHERE h.id_history IS NOT NULL),
+                '[]'
+            ) AS history
+
+        FROM purchase_requests pr
+
+        LEFT JOIN purchase_request_histories h
+            ON h.id_request = pr.id_request
+            AND h.is_active = 1
+
+        WHERE
+            pr.id_pegawai = :id_pegawai
+            AND pr.is_active = 1
+
+        GROUP BY
+            pr.id_request
+
+        ORDER BY
+            pr.created_at DESC
+    """)
+
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sql,
+            {"id_pegawai": id_pegawai}
+        ).mappings().all()
+
+        return [dict(row) for row in rows]
+
+# ==================== #!SECTION - USER DASHBOARD ============================= #
+
+# ==================== #!SECTION - USER DASHBOARD ============================ #

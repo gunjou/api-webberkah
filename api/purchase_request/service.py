@@ -557,3 +557,27 @@ def get_purchase_request_history_service(id_request: int, id_pegawai: int = None
     )
 
 # ================== #!SECTION - PURCHASE REQUEST HISTORY ==================== #
+
+
+
+# ============================================================================ #
+#                     #SECTION - USER DASHBOARD                                #
+# ============================================================================ #
+
+# ======================= #ANCHOR - MY SUMMARY =============================== #
+
+def get_my_purchase_request_summary_service(id_pegawai: int):
+    summary = get_purchase_request_dashboard_summary(
+        id_pegawai=id_pegawai
+    )
+
+    requests = get_purchase_request_dashboard_list(
+        id_pegawai=id_pegawai
+    )
+
+    return {
+        "summary": summary,
+        "requests": requests
+    }
+
+# ==================== #!SECTION - USER DASHBOARD ============================ #
