@@ -292,82 +292,131 @@ def get_purchase_request_list(id_user: int, account_type: str, filters: dict):
 
 def get_purchase_request_data_history(id_user: int, account_type: str, filters: dict):
 
-    status = filters.get("status") or "PAID"
-    page = filters.get("page", 1)
-    limit = filters.get("limit", 10)
-    offset = (page - 1) * limit
+    status = filters["status"]
+    page = filters["page"]
+    per_page = filters["per_page"]
+    offset = (page - 1) * per_page
 
-    sql = """
-        SELECT
-            pr.id_request, pr.request_number, pr.id_pegawai, p.nama_lengkap AS nama_pegawai, pr.id_departemen, 
-            d.nama_departemen, pr.tanggal_request, pr.nama_pekerjaan, pr.priority, pr.total_amount, pr.status, 
-            h.created_at AS status_changed_at
-        FROM purchase_request_histories h
-        INNER JOIN purchase_requests pr
-            ON pr.id_request = h.id_request
-        INNER JOIN pegawai p
+    base_where = """
+        FROM purchase_requests pr
+        JOIN pegawai p
             ON p.id_pegawai = pr.id_pegawai
-        INNER JOIN ref_departemen d
+        JOIN ref_departemen d
             ON d.id_departemen = pr.id_departemen
         WHERE
             pr.is_active = 1
-            AND h.is_active = 1
-            AND h.status = :status
+            AND pr.status = :status
     """
 
     params = {
         "status": status,
-        "limit": limit,
+        "limit": per_page,
         "offset": offset
     }
 
-    # ============================================================
-    # USER / PEGAWAI
-    # ============================================================
+    # =========================================================
+    # FILTER USER
+    # =========================================================
 
     if account_type == "pegawai":
-        sql += """
+        base_where += """
             AND pr.id_pegawai = :id_pegawai
         """
         params["id_pegawai"] = id_user
 
-    # ============================================================
-    # FILTER TANGGAL HISTORY
-    # ============================================================
+    # =========================================================
+    # FILTER DEPARTEMEN
+    # =========================================================
+
+    if filters.get("id_departemen"):
+        base_where += """
+            AND pr.id_departemen = :id_departemen
+        """
+        params["id_departemen"] = int(
+            filters["id_departemen"]
+        )
+
+    # =========================================================
+    # FILTER TANGGAL
+    # =========================================================
 
     if filters.get("tanggal_mulai"):
-        sql += """
-            AND h.created_at >= CAST(:tanggal_mulai AS DATE)
+        base_where += """
+            AND pr.tanggal_request >= :tanggal_mulai
         """
-        params["tanggal_mulai"] = filters["tanggal_mulai"]
+        params["tanggal_mulai"] = filters[
+            "tanggal_mulai"
+        ]
 
     if filters.get("tanggal_selesai"):
-        sql += """
-            AND h.created_at < (
-                CAST(:tanggal_selesai AS DATE)
-                + INTERVAL '1 day'
-            )
+        base_where += """
+            AND pr.tanggal_request <= :tanggal_selesai
         """
-        params["tanggal_selesai"] = filters["tanggal_selesai"]
+        params["tanggal_selesai"] = filters[
+            "tanggal_selesai"
+        ]
 
-    # ============================================================
-    # ORDER + PAGINATION
-    # ============================================================
+    # =========================================================
+    # COUNT
+    # =========================================================
 
-    sql += """
+    count_sql = text(
+        f"""
+        SELECT COUNT(*) AS total
+        {base_where}
+        """
+    )
+
+    # =========================================================
+    # DATA
+    # =========================================================
+
+    data_sql = text(
+        f"""
+        SELECT
+            pr.id_request, pr.request_number, pr.id_pegawai, p.nama_lengkap AS nama_pegawai, pr.id_departemen, 
+            d.nama_departemen, pr.tanggal_request, pr.nama_pekerjaan, pr.priority, pr.note, pr.total_amount, 
+            pr.payment_description, pr.payment_bank, pr.payment_account_number, pr.payment_account_name, 
+            pr.attachment_name, pr.attachment_path, pr.status, pr.created_at, pr.updated_at
+        {base_where}
         ORDER BY
-            h.created_at DESC
+            pr.tanggal_request DESC,
+            pr.created_at DESC
         LIMIT :limit
         OFFSET :offset
-    """
+        """
+    )
 
     with engine.connect() as conn:
+
+        total = conn.execute(
+            count_sql,
+            params
+        ).scalar()
+
         rows = conn.execute(
-            text(sql),
+            data_sql,
             params
         ).mappings().all()
 
-        return [dict(row) for row in rows]
+    total = int(total or 0)
+
+    total_pages = (
+        (total + per_page - 1) // per_page
+        if total > 0
+        else 0
+    )
+
+    return {
+        "data": [dict(row) for row in rows],
+
+        "page_info": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": total_pages
+        }
+    }
 
 
 # ============================================================================ #

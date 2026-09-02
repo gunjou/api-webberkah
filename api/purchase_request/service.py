@@ -163,7 +163,7 @@ def get_purchase_request_list_service(id_user: int, account_type: str, filters: 
 
 def get_purchase_request_data_history_service(id_user: int, account_type: str, filters: dict):
 
-    status = filters.get("status") or "PAID"
+    status = filters.get("status", "PAID")
 
     if status not in ("PAID", "REJECTED"):
         raise ValidationError(
@@ -175,17 +175,17 @@ def get_purchase_request_data_history_service(id_user: int, account_type: str, f
             "Account type tidak valid."
         )
 
-    page = filters.get("page", 1)
-    limit = filters.get("limit", 10)
+    page = int(filters.get("page", 1))
+    per_page = int(filters.get("per_page", 10))
 
     if page < 1:
         raise ValidationError(
-            "Page harus lebih besar atau sama dengan 1."
+            "Page minimal adalah 1."
         )
 
-    if limit < 1 or limit > 100:
+    if per_page < 1 or per_page > 100:
         raise ValidationError(
-            "Limit harus berada antara 1 sampai 100."
+            "Per page harus antara 1 sampai 100."
         )
 
     tanggal_mulai = filters.get("tanggal_mulai")
@@ -198,12 +198,16 @@ def get_purchase_request_data_history_service(id_user: int, account_type: str, f
                 "dari tanggal selesai."
             )
 
+    filters["status"] = status
+    filters["page"] = page
+    filters["per_page"] = per_page
+
     return get_purchase_request_data_history(
         id_user=id_user,
         account_type=account_type,
         filters=filters
     )
-    
+
 
 
 # ============================================================================ #

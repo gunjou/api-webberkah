@@ -123,11 +123,12 @@ purchase_request_filter_parser.add_argument("tanggal_selesai", type=str, require
 
 
 purchase_request_history_parser = ns.parser()
-purchase_request_history_parser.add_argument("status", type=str, required=False, choices=("PAID", "REJECTED"), default="PAID",location="args",help="History Status")
-purchase_request_history_parser.add_argument("tanggal_mulai", type=str, required=False, location="args", help="Start Date (YYYY-MM-DD)")
-purchase_request_history_parser.add_argument("tanggal_selesai", type=str, required=False, location="args", help="End Date (YYYY-MM-DD)")
-purchase_request_history_parser.add_argument("page", type=int, required=False, default=1, location="args", help="Page number")
-purchase_request_history_parser.add_argument("limit", type=int, required=False, default=10, location="args", help="Number of records per page")
+purchase_request_history_parser.add_argument("status", required=False, default="PAID", choices=("PAID", "REJECTED"), location="args", help="History Status")
+purchase_request_history_parser.add_argument("id_departemen", required=False, location="args", help="Department ID")
+purchase_request_history_parser.add_argument("tanggal_mulai", required=False, location="args", help="Start Date (YYYY-MM-DD)")
+purchase_request_history_parser.add_argument("tanggal_selesai", required=False, location="args", help="End Date (YYYY-MM-DD)")
+purchase_request_history_parser.add_argument("page", required=False, default=1, location="args", help="Page number")
+purchase_request_history_parser.add_argument("per_page", required=False, default=10, location="args", help="Data per page")
 
 
 # ============================================================================ #
@@ -271,12 +272,10 @@ class PurchaseRequestHistoryResource(Resource):
     @ns.expect(purchase_request_history_parser)
     @measure_execution_time
     def get(self):
-        """List Purchase Request History"""
+        """History Purchase Request"""
 
-        filters = purchase_request_history_parser.parse_args()
-
+        filters = request.args.to_dict()
         claims = get_jwt()
-
         account_type = claims.get("account_type")
         id_user = int(get_jwt_identity())
 
