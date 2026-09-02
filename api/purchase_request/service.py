@@ -3,8 +3,10 @@ from decimal import Decimal
 from api.shared.exceptions import ValidationError, NotFoundError
 from api.shared.helper import get_wita
 from api.utils.config import engine
+from api.utils.pdf_helper import _format_filename_date, _safe_filename
 
 from .query import *
+from .pdf import generate_purchase_request_pdf_with_attachment
 
 
 # ============================================================================ #
@@ -122,15 +124,34 @@ def get_purchase_request_list_service(id_user: int, account_type: str, filters: 
 
     status = filters.get("status")
 
-    if status and status not in ("REQUESTED", "REVIEWED", "APPROVED", "REJECTED"):
-        raise ValidationError("Status purchase request tidak valid.")
-    
-    if account_type not in ("admin", "pegawai"):
-        raise ValidationError("Account type tidak valid.")
+    valid_statuses = (
+        "ACTIVE",
+        "REQUESTED",
+        "REVIEWED",
+        "APPROVED",
+        "REJECTED",
+        "PAID"
+    )
 
-    if filters.get("tanggal_mulai") and filters.get("tanggal_selesai"):
-        if filters["tanggal_mulai"] > filters["tanggal_selesai"]:
-            raise ValidationError("Tanggal mulai tidak boleh lebih besar dari tanggal selesai.")
+    if status and status not in valid_statuses:
+        raise ValidationError(
+            "Status purchase request tidak valid."
+        )
+
+    if account_type not in ("admin", "pegawai"):
+        raise ValidationError(
+            "Account type tidak valid."
+        )
+
+    tanggal_mulai = filters.get("tanggal_mulai")
+    tanggal_selesai = filters.get("tanggal_selesai")
+
+    if tanggal_mulai and tanggal_selesai:
+        if tanggal_mulai > tanggal_selesai:
+            raise ValidationError(
+                "Tanggal mulai tidak boleh lebih besar "
+                "dari tanggal selesai."
+            )
 
     return get_purchase_request_list(
         id_user=id_user,
@@ -138,6 +159,51 @@ def get_purchase_request_list_service(id_user: int, account_type: str, filters: 
         filters=filters
     )
 
+# =========================== #ANCHOR - DATA HISTORY ========================= #
+
+def get_purchase_request_data_history_service(id_user: int, account_type: str, filters: dict):
+
+    status = filters.get("status") or "PAID"
+
+    if status not in ("PAID", "REJECTED"):
+        raise ValidationError(
+            "Status history purchase request tidak valid."
+        )
+
+    if account_type not in ("admin", "pegawai"):
+        raise ValidationError(
+            "Account type tidak valid."
+        )
+
+    page = filters.get("page", 1)
+    limit = filters.get("limit", 10)
+
+    if page < 1:
+        raise ValidationError(
+            "Page harus lebih besar atau sama dengan 1."
+        )
+
+    if limit < 1 or limit > 100:
+        raise ValidationError(
+            "Limit harus berada antara 1 sampai 100."
+        )
+
+    tanggal_mulai = filters.get("tanggal_mulai")
+    tanggal_selesai = filters.get("tanggal_selesai")
+
+    if tanggal_mulai and tanggal_selesai:
+        if tanggal_mulai > tanggal_selesai:
+            raise ValidationError(
+                "Tanggal mulai tidak boleh lebih besar "
+                "dari tanggal selesai."
+            )
+
+    return get_purchase_request_data_history(
+        id_user=id_user,
+        account_type=account_type,
+        filters=filters
+    )
+    
 
 
 # ============================================================================ #
@@ -581,3 +647,97 @@ def get_my_purchase_request_summary_service(id_pegawai: int):
     }
 
 # ==================== #!SECTION - USER DASHBOARD ============================ #
+
+
+
+# ============================================================================ #
+#                       #SECTION - EXPORT PURCHASE REQUEST                     #
+# ============================================================================ #
+
+# ===================== #ANCHOR - DOWNLOAD PURCHASE REQUEST =================== #
+
+def generate_purchase_request_pdf_service(
+    id_request: int,
+    id_pegawai: int = None
+):
+    """
+    Generate Purchase Request PDF beserta attachment.
+
+    Access:
+    - Admin    : dapat melihat semua purchase request
+    - Pegawai  : hanya dapat melihat purchase request miliknya
+    """
+
+    # =================================================
+    # 1. GET PURCHASE REQUEST
+    # =================================================
+
+    purchase_request = get_purchase_request_pdf(
+        id_request=id_request,
+        id_pegawai=id_pegawai
+    )
+
+    if not purchase_request:
+        raise NotFoundError(
+            "Purchase request tidak ditemukan."
+        )
+
+    # =================================================
+    # 2. GET ITEMS
+    # =================================================
+
+    items = get_purchase_request_pdf_items(
+        id_request=id_request
+    )
+
+    # =================================================
+    # 3. GET HISTORY
+    # =================================================
+
+    history = get_purchase_request_pdf_history(
+        id_request=id_request
+    )
+
+    # =================================================
+    # 4. GENERATE PDF
+    # =================================================
+
+    pdf = generate_purchase_request_pdf_with_attachment(
+        purchase_request=purchase_request,
+        items=items,
+        history=history
+    )
+
+    # =================================================
+    # 5. PREPARE FILENAME
+    # =================================================
+
+    nama_pegawai = _safe_filename(
+        purchase_request.get("nama_pegawai")
+    )
+
+    nama_pekerjaan = _safe_filename(
+        purchase_request.get("nama_pekerjaan")
+    )
+
+    tanggal_request = _format_filename_date(
+        purchase_request.get("tanggal_request")
+    )
+
+    filename = (
+        f"Pengajuan {nama_pegawai} - "
+        f"{nama_pekerjaan} - "
+        f"{tanggal_request}.pdf"
+    )
+
+    # =================================================
+    # 6. RETURN
+    # =================================================
+
+    return {
+        "pdf": pdf,
+        "filename": filename
+    }
+
+
+# ================= #!SECTION - DOWNLOAD PURCHASE REQUEST ====================== #

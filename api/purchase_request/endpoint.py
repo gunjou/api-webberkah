@@ -2,7 +2,7 @@
 
 import json
 
-from flask import request
+from flask import request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required, get_jwt
 from flask_restx import Resource, fields
 
@@ -105,10 +105,29 @@ purchase_request_paid_model = ns.model(
 # ========================== #ANCHOR - SWAGGER PARSER ======================== #
 
 purchase_request_filter_parser = ns.parser()
-purchase_request_filter_parser.add_argument("status", type=str, required=False, choices=("REQUESTED", "REVIEWED", "APPROVED", "REJECTED", "PAID"), location="args", help="Request Status")
+purchase_request_filter_parser.add_argument(
+    "status",
+    type=str,
+    required=False,
+    choices=("ACTIVE", "REQUESTED", "REVIEWED", "APPROVED", "REJECTED", "PAID"),
+    location="args",
+    default="ACTIVE",
+    help=(
+        "Request Status. "
+        "ACTIVE = REQUESTED, REVIEWED, APPROVED"
+    )
+)
 purchase_request_filter_parser.add_argument("id_departemen", type=int, required=False, location="args", help="Department ID")
 purchase_request_filter_parser.add_argument("tanggal_mulai", type=str, required=False, location="args", help="Start Date (YYYY-MM-DD)")
 purchase_request_filter_parser.add_argument("tanggal_selesai", type=str, required=False, location="args", help="End Date (YYYY-MM-DD)")
+
+
+purchase_request_history_parser = ns.parser()
+purchase_request_history_parser.add_argument("status", type=str, required=False, choices=("PAID", "REJECTED"), default="PAID",location="args",help="History Status")
+purchase_request_history_parser.add_argument("tanggal_mulai", type=str, required=False, location="args", help="Start Date (YYYY-MM-DD)")
+purchase_request_history_parser.add_argument("tanggal_selesai", type=str, required=False, location="args", help="End Date (YYYY-MM-DD)")
+purchase_request_history_parser.add_argument("page", type=int, required=False, default=1, location="args", help="Page number")
+purchase_request_history_parser.add_argument("limit", type=int, required=False, default=10, location="args", help="Number of records per page")
 
 
 # ============================================================================ #
@@ -142,7 +161,7 @@ class PurchaseRequestListResource(Resource):
     def get(self):
         """List Purchase Request"""
 
-        filters = request.args.to_dict()
+        filters = purchase_request_filter_parser.parse_args()
         claims = get_jwt()
         account_type = claims.get("account_type")
         id_user = int(get_jwt_identity())
@@ -237,6 +256,42 @@ class PurchaseRequestDetailResource(Resource):
         )
 
 # ==================== #!SECTION - DETAIL PURCHASE REQUEST =================== #
+
+
+
+# ============================================================================ #
+#                            #SECTION - DATA HISTORY                           #
+# ============================================================================ #
+
+
+@ns.route("/history")
+class PurchaseRequestHistoryResource(Resource):
+
+    @jwt_required()
+    @ns.expect(purchase_request_history_parser)
+    @measure_execution_time
+    def get(self):
+        """List Purchase Request History"""
+
+        filters = purchase_request_history_parser.parse_args()
+
+        claims = get_jwt()
+
+        account_type = claims.get("account_type")
+        id_user = int(get_jwt_identity())
+
+        data = get_purchase_request_data_history_service(
+            id_user=id_user,
+            account_type=account_type,
+            filters=filters
+        )
+
+        return success(
+            data=data,
+            message="History purchase request berhasil diambil."
+        )
+
+# ========================== #!SECTION - DATA HISTORY ======================== #
 
 
 
@@ -434,3 +489,56 @@ class PurchaseRequestMySummaryResource(Resource):
         )
 
 # ==================== #!SECTION - USER DASHBOARD ============================ #
+
+
+
+# ============================================================================ #
+#                       #SECTION - EXPORT PURCHASE REQUEST                     #
+# ============================================================================ #
+
+# ===================== #ANCHOR - DOWNLOAD PURCHASE REQUEST =================== #
+
+@ns.route("/<int:id_request>/pdf")
+class PurchaseRequestPdfResource(Resource):
+
+    @jwt_required()
+    @measure_execution_time
+    def get(self, id_request):
+        """Download Purchase Request PDF"""
+
+        claims = get_jwt()
+
+        account_type = claims.get("account_type")
+
+        # =================================================
+        # PEGAWAI
+        # =================================================
+
+        id_pegawai = None
+
+        if account_type == "pegawai":
+            id_pegawai = int(
+                get_jwt_identity()
+            )
+
+        # =================================================
+        # GENERATE PDF
+        # =================================================
+
+        result = generate_purchase_request_pdf_service(
+            id_request=id_request,
+            id_pegawai=id_pegawai
+        )
+
+        # =================================================
+        # DOWNLOAD
+        # =================================================
+
+        return send_file(
+            result["pdf"],
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=result["filename"]
+        )
+
+# ================= #!SECTION - DOWNLOAD PURCHASE REQUEST ====================== #
