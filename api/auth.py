@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from flask_restx import Namespace, Resource, fields
 from flask import request
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt, get_jwt_identity
@@ -180,8 +182,100 @@ class PegawaiLoginResource(Resource):
                 }
             }
         )
+
+
+
+# ======================= #ANCHOR - LOGIN PEGAWAI MOBILE ====================== #
+@auth_ns.route("/pegawai/login-mobile")
+class PegawaiLoginMobileResource(Resource):
+
+    @auth_ns.expect(pegawai_login_model, validate=True)
+    @measure_execution_time
+    def post(self):
+        """Akses: (pegawai), Login Pegawai Mobile"""
+
+        body = request.get_json(silent=True) or {}
         
-        
+        username = body.get("username")
+        password = body.get("password")
+        kode_pemulihan = body.get("password")
+
+        # 1️⃣ Validasi input minimum
+        if not username:
+            raise ValidationError(
+                message="Username wajib diisi",
+                errors={"username": "required"}
+            )
+
+        if not password and not kode_pemulihan:
+            raise ValidationError(
+                message="Password atau kode pemulihan wajib diisi",
+                errors={
+                    "password": "required_without:kode_pemulihan",
+                    "kode_pemulihan": "required_without:password"
+                }
+            )
+
+        # 2️⃣ Ambil data pegawai
+        pegawai = get_pegawai_by_username(username)
+        if not pegawai:
+            raise AuthError("Username tidak terdaftar")
+
+        if pegawai["pegawai_status"] != 1:
+            raise AuthError("Pegawai tidak aktif")
+
+        # 3️⃣ Validasi kredensial
+        authenticated = False
+
+        # ➤ Login dengan password
+        if password and check_password_hash(pegawai["password_hash"], password):
+            authenticated = True
+
+        # ➤ Fallback login dengan kode pemulihan
+        elif kode_pemulihan and pegawai["kode_pemulihan"]:
+            if kode_pemulihan == pegawai["kode_pemulihan"]:
+                authenticated = True
+
+        if not authenticated:
+            raise AuthError("Kredensial tidak valid")
+
+        # 4. Generate token khusus mobile
+        access_token = create_access_token(
+            identity=str(pegawai["id_pegawai"]),
+            additional_claims={
+                "account_type": "pegawai",
+                "client": "mobile"
+            },
+            expires_delta=timedelta(days=365)
+        )
+
+        refresh_token = create_refresh_token(
+            identity=str(pegawai["id_pegawai"]),
+            additional_claims={
+                "account_type": "pegawai",
+                "client": "mobile"
+            },
+            expires_delta=timedelta(days=1000)
+        )
+
+        # 5. Update last login
+        update_pegawai_last_login(pegawai["id_auth_pegawai"])
+
+        return success(
+            message="Login pegawai mobile berhasil",
+            data={
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "user": {
+                    "id_pegawai": pegawai["id_pegawai"],
+                    "username": pegawai["username"],
+                    "img_path": pegawai["img_path"]
+                }
+            }
+        )
+
+
+
 @auth_ns.route("/logout")
 class LogoutResource(Resource):
 
