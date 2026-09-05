@@ -223,6 +223,12 @@ class PegawaiLoginMobileResource(Resource):
 
         if pegawai["pegawai_status"] != 1:
             raise AuthError("Pegawai tidak aktif")
+        
+        if not check_pegawai_aplikasi(
+            id_pegawai=pegawai["id_pegawai"],
+            id_aplikasi=2
+        ):
+            raise AuthError("Pegawai tidak memiliki akses ke aplikasi ini")
 
         # 3️⃣ Validasi kredensial
         authenticated = False

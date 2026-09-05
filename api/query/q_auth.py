@@ -68,6 +68,27 @@ def update_pegawai_last_login(id_auth_pegawai: int):
         })
 
 
+def check_pegawai_aplikasi(id_pegawai: int, id_aplikasi: int) -> bool:
+    sql = text("""
+        SELECT EXISTS (
+            SELECT 1
+            FROM pegawai_aplikasi
+            WHERE id_pegawai = :id_pegawai
+              AND id_aplikasi = :id_aplikasi
+              AND status = 1
+        )
+    """)
+
+    with engine.connect() as conn:
+        return conn.execute(
+            sql,
+            {
+                "id_pegawai": id_pegawai,
+                "id_aplikasi": id_aplikasi
+            }
+        ).scalar()
+
+
 # ======================================
 # Fungsi untuk keperluan ganti password
 # ======================================
