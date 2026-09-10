@@ -46,6 +46,37 @@ purchase_request_create_model = ns.model(
     }
 )
 
+purchase_request_admin_create_model = ns.model(
+    "PurchaseRequestAdminCreate", {
+        "id_pegawai": fields.Integer(required=True, description="Employee ID of the requester"),
+        "tanggal_request": fields.String(required=False, description="Request Date (YYYY-MM-DD)"),
+        "id_departemen": fields.Integer(required=True, description="Department ID"),
+        "nama_pekerjaan": fields.String(required=True, description="Job Name"),
+        "priority": fields.String(required=False, default="NORMAL", enum=["NORMAL", "URGENT", "TOP_URGENT"], description="Request Priority"),
+        "note": fields.String(required=False, description="Request Note"),
+        "items": fields.List(
+            fields.Nested(
+                ns.model(
+                    "PurchaseRequestAdminItemCreate", {
+                        "keterangan": fields.String(required=True, description="Item Description"),
+                        "unit": fields.String(required=True, description="Unit"),
+                        "harga_satuan": fields.Float(required=True, description="Unit Price"),
+                        "jumlah": fields.Float(required=True, description="Quantity")
+                    }
+                )
+            ),
+            required=True, 
+            description="Purchase Request Items"
+        ),
+        "payment_description": fields.String(required=False, description="Payment Description"),
+        "payment_bank": fields.String(required=False, description="Bank Name"),
+        "payment_account_number": fields.String(required=False, description="Bank Account Number"),
+        "payment_account_name": fields.String(required=False, description="Bank Account Name"),
+        "attachment_name": fields.String(required=False, description="Attachment File Name"),
+        "attachment_path": fields.String(required=False, description="Attachment CDN URL")
+    }
+)
+
 purchase_request_update_model = ns.model(
     "PurchaseRequestUpdate", {
         "tanggal_request": fields.String(required=False, description="Request Date (YYYY-MM-DD)"),
@@ -210,20 +241,32 @@ class PurchaseRequestDetailResource(Resource):
             data=data,
             message="Detail purchase request"
         )
-    
-    
+
+
     @jwt_required()
     @ns.expect(purchase_request_update_model)
     @measure_execution_time
     def put(self, id_request):
         """Update Purchase Request"""
 
+        claims = get_jwt()
+        account_type = claims.get("account_type")
+
         body = request.get_json()
 
         if not body:
-            raise ValidationError("Data pengajuan wajib diisi.")
+            raise ValidationError(
+                "Data pengajuan wajib diisi."
+            )
 
-        id_pegawai = int(get_jwt_identity())
+        if account_type == "pegawai":
+            id_pegawai = int(get_jwt_identity())
+        elif account_type == "admin":
+            id_pegawai = None
+        else:
+            raise ValidationError(
+                "Account type tidak valid."
+            )
 
         update_purchase_request_service(
             id_request=id_request,
@@ -259,6 +302,42 @@ class PurchaseRequestDetailResource(Resource):
 # ==================== #!SECTION - DETAIL PURCHASE REQUEST =================== #
 
 
+
+# ============================================================================ #
+#                            #SECTION - ADMIN MANAGE                           #
+# ============================================================================ #
+
+@ns.route("/admin")
+class PurchaseRequestAdminResource(Resource):
+
+    @jwt_required()
+    @ns.expect(purchase_request_admin_create_model)
+    @measure_execution_time
+    def post(self):
+        """Create Purchase Request as Admin"""
+
+        claims = get_jwt()
+
+        if claims.get("account_type") != "admin":
+            raise ValidationError(
+                "Endpoint ini hanya dapat digunakan oleh admin."
+            )
+
+        body = request.get_json()
+
+        if not body:
+            raise ValidationError(
+                "Data pengajuan wajib diisi."
+            )
+
+        data = create_purchase_request_admin_service(body)
+
+        return success(
+            data=data,
+            message="Purchase request berhasil dibuat oleh admin."
+        )
+
+# ========================== #!SECTION - ADMIN MANAGE ======================== #
 
 # ============================================================================ #
 #                            #SECTION - DATA HISTORY                           #

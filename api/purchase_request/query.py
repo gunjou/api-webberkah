@@ -183,7 +183,7 @@ def get_purchase_request_list(id_user: int, account_type: str, filters: dict):
 
     sql = """
         SELECT
-            pr.id_request, pr.request_number, pr.id_pegawai, p.nama_lengkap AS nama_pegawai, pr.id_departemen, 
+            pr.id_request, pr.request_number, pr.id_pegawai, p.nama_lengkap AS nama_pegawai, p.nama_panggilan, pr.id_departemen, 
             d.nama_departemen, pr.tanggal_request, pr.nama_pekerjaan, pr.priority, pr.note, pr.total_amount, 
             pr.payment_description, pr.payment_bank, pr.payment_account_number, pr.payment_account_name, 
             pr.attachment_name, pr.attachment_path, pr.status, pr.created_at, pr.updated_at
@@ -374,7 +374,7 @@ def get_purchase_request_data_history(id_user: int, account_type: str, filters: 
     data_sql = text(
         f"""
         SELECT
-            pr.id_request, pr.request_number, pr.id_pegawai, p.nama_lengkap AS nama_pegawai, pr.id_departemen, 
+            pr.id_request, pr.request_number, pr.id_pegawai, p.nama_lengkap AS nama_pegawai, p.nama_panggilan, pr.id_departemen, 
             d.nama_departemen, pr.tanggal_request, pr.nama_pekerjaan, pr.priority, pr.note, pr.total_amount, 
             pr.payment_description, pr.payment_bank, pr.payment_account_number, pr.payment_account_name, 
             pr.attachment_name, pr.attachment_path, pr.status, pr.created_at, pr.updated_at
@@ -430,9 +430,9 @@ def get_purchase_request_detail(id_request: int, account_type: str, id_pegawai: 
     request_sql = """
         SELECT
             pr.id_request, pr.request_number, pr.tanggal_request, pr.nama_pekerjaan, pr.priority, pr.status, pr.note, 
-            pr.total_amount, p.id_pegawai, p.nama_lengkap, d.id_departemen, d.nama_departemen, pr.payment_description, 
-            pr.payment_bank, pr.payment_account_number, pr.payment_account_name, pr.attachment_name, pr.attachment_path, 
-            pr.created_at, pr.updated_at
+            pr.total_amount, p.id_pegawai, p.nama_lengkap, p.nama_panggilan, d.id_departemen, d.nama_departemen, 
+            pr.payment_description, pr.payment_bank, pr.payment_account_number, pr.payment_account_name, 
+            pr.attachment_name, pr.attachment_path, pr.created_at, pr.updated_at
         FROM purchase_requests pr
         INNER JOIN pegawai p
             ON p.id_pegawai = pr.id_pegawai
@@ -507,7 +507,8 @@ def get_purchase_request_detail(id_request: int, account_type: str, id_pegawai: 
         "total_amount": request["total_amount"],
         "pegawai": {
             "id_pegawai": request["id_pegawai"],
-            "nama_lengkap": request["nama_lengkap"]
+            "nama_lengkap": request["nama_lengkap"],
+            "nama_panggilan": request["nama_panggilan"]
         },
         "departemen": {
             "id_departemen": request["id_departemen"],
@@ -541,8 +542,7 @@ def get_purchase_request_detail(id_request: int, account_type: str, id_pegawai: 
 
 # ======================= #ANCHOR - REQUEST FOR UPDATE ======================= #
 
-def get_purchase_request_for_update(id_request: int, id_pegawai: int):
-
+def get_purchase_request_for_update(id_request: int, id_pegawai: int | None = None):
     sql = text("""
         SELECT
             pr.id_request,
@@ -553,10 +553,12 @@ def get_purchase_request_for_update(id_request: int, id_pegawai: int):
         FROM purchase_requests pr
         INNER JOIN pegawai p
             ON p.id_pegawai = pr.id_pegawai
-        WHERE
-            pr.id_request = :id_request
-            AND pr.id_pegawai = :id_pegawai
-            AND pr.is_active = 1
+        WHERE pr.id_request = :id_request
+          AND pr.is_active = 1
+          AND (
+              :id_pegawai IS NULL
+              OR pr.id_pegawai = :id_pegawai
+          )
         LIMIT 1
     """)
 

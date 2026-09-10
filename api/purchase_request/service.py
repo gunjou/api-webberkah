@@ -10,7 +10,7 @@ from .pdf import generate_purchase_request_pdf_with_attachment
 
 
 # ============================================================================ #
-#                   #SECTION - CREATE PURCHASE REQUEST                        #
+#                   #SECTION - CREATE PURCHASE REQUEST                         #
 # ============================================================================ #
 
 # ===================== #ANCHOR - CREATE PURCHASE REQUEST =================== #
@@ -116,6 +116,103 @@ def create_purchase_request_service(body: dict):
     }
 
 # ================ #!SECTION - CREATE PURCHASE REQUEST ====================== #
+
+
+# ================= #ANCHOR - CREATE PURCHASE REQUEST BY ADMIN ================ #
+def create_purchase_request_admin_service(body: dict):
+
+    items = body.get("items", [])
+
+    if not items:
+        raise ValidationError("Minimal harus terdapat 1 item pengajuan.")
+
+    if body.get("priority") not in ("NORMAL", "URGENT", "TOP_URGENT"):
+        raise ValidationError("Priority tidak valid.")
+
+    if not body.get("id_pegawai"):
+        raise ValidationError("Pegawai pengaju wajib dipilih.")
+
+    total_amount = Decimal("0")
+
+    for index, item in enumerate(items, start=1):
+
+        if not item.get("keterangan"):
+            raise ValidationError(f"Keterangan item ke-{index} wajib diisi.")
+
+        if not item.get("unit"):
+            raise ValidationError(f"Unit item ke-{index} wajib diisi.")
+
+        if item.get("harga_satuan") is None:
+            raise ValidationError(f"Harga satuan item ke-{index} wajib diisi.")
+
+        if item.get("jumlah") is None:
+            raise ValidationError(f"Jumlah item ke-{index} wajib diisi.")
+
+        harga_satuan = Decimal(str(item["harga_satuan"]))
+        jumlah = Decimal(str(item["jumlah"]))
+
+        if harga_satuan < 0:
+            raise ValidationError(f"Harga satuan item ke-{index} tidak boleh negatif.")
+
+        if jumlah <= 0:
+            raise ValidationError(f"Jumlah item ke-{index} harus lebih besar dari 0.")
+
+        item["item_no"] = index
+        item["total"] = harga_satuan * jumlah
+        total_amount += item["total"]
+
+    body["total_amount"] = total_amount
+    body["status"] = "REQUESTED"
+    body["is_active"] = 1
+
+    with engine.begin() as conn:
+
+        pegawai = get_active_pegawai(conn=conn, id_pegawai=body["id_pegawai"])
+
+        if not pegawai:
+            raise NotFoundError("Pegawai tidak ditemukan atau tidak aktif.")
+
+        departemen = get_active_departemen(
+            conn=conn,
+            id_departemen=body["id_departemen"]
+        )
+
+        if not departemen:
+            raise NotFoundError("Departemen tidak ditemukan atau tidak aktif.")
+
+        now = get_wita()
+
+        body["request_number"] = generate_request_number(conn)
+        body["created_at"] = now
+        body["updated_at"] = now
+
+        id_request = create_purchase_request(
+            conn=conn,
+            body=body
+        )
+
+        create_purchase_request_items(
+            conn=conn,
+            id_request=id_request,
+            items=items,
+            now=now
+        )
+
+        create_purchase_request_history(
+            conn=conn,
+            id_request=id_request,
+            status="REQUESTED",
+            nama_pegawai=pegawai["nama_lengkap"],
+            note=body.get("note"),
+            now=now
+        )
+
+    return {
+        "id_request": id_request,
+        "request_number": body["request_number"],
+        "status": "REQUESTED",
+        "total_amount": total_amount
+    }
 
 
 # ======================= #ANCHOR - LIST PURCHASE REQUEST ==================== #
@@ -244,7 +341,7 @@ def update_purchase_request_service(id_request: int, id_pegawai: int, body: dict
 
     status = request_data["status"]
 
-    if status not in ("REQUESTED", "REJECTED"):
+    if id_pegawai != None and status not in ("REQUESTED", "REJECTED"):
         raise ValidationError(
             f"Pengajuan dengan status {status} tidak dapat diedit."
         )
