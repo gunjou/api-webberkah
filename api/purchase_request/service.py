@@ -341,7 +341,8 @@ def update_purchase_request_service(id_request: int, id_pegawai: int, body: dict
 
     status = request_data["status"]
 
-    if id_pegawai != None and status not in ("REQUESTED", "REJECTED"):
+    # if id_pegawai != None and status not in ("REQUESTED", "REJECTED"):
+    if id_pegawai != None:
         raise ValidationError(
             f"Pengajuan dengan status {status} tidak dapat diedit."
         )
