@@ -999,6 +999,7 @@ def get_purchase_request_dashboard_list(id_pegawai: int):
             pr.id_pegawai = :id_pegawai
             AND pr.is_active = 1
             AND pr.status != 'PAID'
+            AND pr.status != 'REJECTED'
 
         GROUP BY
             pr.id_request
