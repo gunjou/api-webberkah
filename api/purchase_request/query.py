@@ -179,14 +179,17 @@ def create_purchase_request_history(conn, id_request: int, status: str, nama_peg
 
 # ======================= #ANCHOR - LIST PURCHASE REQUEST ==================== #
 
-def get_purchase_request_list(id_user: int, account_type: str, filters: dict):
-
+def get_purchase_request_list(
+    id_user: int,
+    account_type: str,
+    filters: dict
+):
     sql = """
         SELECT
-            pr.id_request, pr.request_number, pr.id_pegawai, p.nama_lengkap AS nama_pegawai, p.nama_panggilan, pr.id_departemen, 
-            d.nama_departemen, pr.tanggal_request, pr.nama_pekerjaan, pr.priority, pr.note, pr.total_amount, 
-            pr.payment_description, pr.payment_bank, pr.payment_account_number, pr.payment_account_name, 
-            pr.attachment_name, pr.attachment_path, pr.status, pr.created_at, pr.updated_at
+            pr.id_request, pr.request_number, pr.id_pegawai, p.nama_lengkap AS nama_pegawai, p.nama_panggilan, 
+            pr.id_departemen, d.nama_departemen, pr.tanggal_request, pr.nama_pekerjaan, pr.priority, pr.note, 
+            pr.total_amount, pr.payment_description, pr.payment_bank, pr.payment_account_number, 
+            pr.payment_account_name, pr.attachment_name, pr.attachment_path, pr.status, pr.created_at, pr.updated_at
         FROM purchase_requests pr
         JOIN pegawai p
             ON p.id_pegawai = pr.id_pegawai
@@ -205,7 +208,6 @@ def get_purchase_request_list(id_user: int, account_type: str, filters: dict):
     status = filters.get("status")
 
     if status == "ACTIVE":
-
         sql += """
             AND pr.status IN (
                 'REQUESTED',
@@ -215,7 +217,6 @@ def get_purchase_request_list(id_user: int, account_type: str, filters: dict):
         """
 
     elif status:
-
         sql += """
             AND pr.status = :status
         """
@@ -230,6 +231,7 @@ def get_purchase_request_list(id_user: int, account_type: str, filters: dict):
         sql += """
             AND pr.id_pegawai = :id_pegawai
         """
+
         params["id_pegawai"] = id_user
 
     # ============================================================
@@ -254,9 +256,7 @@ def get_purchase_request_list(id_user: int, account_type: str, filters: dict):
             AND pr.tanggal_request >= :tanggal_mulai
         """
 
-        params["tanggal_mulai"] = (
-            filters["tanggal_mulai"]
-        )
+        params["tanggal_mulai"] = filters["tanggal_mulai"]
 
     # ============================================================
     # TANGGAL SELESAI
@@ -267,9 +267,7 @@ def get_purchase_request_list(id_user: int, account_type: str, filters: dict):
             AND pr.tanggal_request <= :tanggal_selesai
         """
 
-        params["tanggal_selesai"] = (
-            filters["tanggal_selesai"]
-        )
+        params["tanggal_selesai"] = filters["tanggal_selesai"]
 
     # ============================================================
     # ORDER
@@ -282,10 +280,109 @@ def get_purchase_request_list(id_user: int, account_type: str, filters: dict):
     """
 
     with engine.connect() as conn:
-        return conn.execute(
+
+        purchase_requests = conn.execute(
             text(sql),
             params
         ).mappings().all()
+
+        if not purchase_requests:
+            return []
+
+        request_ids = [
+            request["id_request"]
+            for request in purchase_requests
+        ]
+
+        # ========================================================
+        # GET ALL ITEMS
+        # ========================================================
+
+        items_sql = text("""
+            SELECT
+                id_item,
+                id_request,
+                item_no,
+                keterangan,
+                unit,
+                harga_satuan,
+                jumlah,
+                total
+            FROM purchase_request_items
+            WHERE id_request = ANY(:request_ids)
+            ORDER BY
+                id_request,
+                item_no
+        """)
+
+        items = conn.execute(
+            items_sql,
+            {
+                "request_ids": request_ids
+            }
+        ).mappings().all()
+
+    # ============================================================
+    # GROUP ITEMS BY REQUEST
+    # ============================================================
+
+    items_by_request = {}
+
+    for item in items:
+        id_request = item["id_request"]
+
+        if id_request not in items_by_request:
+            items_by_request[id_request] = []
+
+        items_by_request[id_request].append({
+            "id_item": item["id_item"],
+            "item_no": item["item_no"],
+            "keterangan": item["keterangan"],
+            "unit": item["unit"],
+            "harga_satuan": item["harga_satuan"],
+            "jumlah": item["jumlah"],
+            "total": item["total"]
+        })
+
+    # ============================================================
+    # BUILD RESPONSE
+    # ============================================================
+
+    result = []
+
+    for request in purchase_requests:
+
+        request_data = {
+            "id_request": request["id_request"],
+            "request_number": request["request_number"],
+            "tanggal_request": request["tanggal_request"],
+            "nama_pekerjaan": request["nama_pekerjaan"],
+            "priority": request["priority"],
+            "status": request["status"],
+            "note": request["note"],
+            "total_amount": request["total_amount"],
+            "id_pegawai": request["id_pegawai"],
+            "nama_pegawai": request["nama_pegawai"],
+            "nama_panggilan": request["nama_panggilan"],
+            "id_departemen": request["id_departemen"],
+            "nama_departemen": request["nama_departemen"],
+            "payment_description": request["payment_description"],
+            "payment_bank": request["payment_bank"],
+            "payment_account_number": request["payment_account_number"],
+            "payment_account_name": request["payment_account_name"],
+            "attachment_name": request["attachment_name"],
+            "attachment_path": request["attachment_path"],
+            "items": items_by_request.get(
+                request["id_request"],
+                []
+            ),
+            "created_at": request["created_at"],
+            "updated_at": request["updated_at"]
+        }
+
+        result.append(request_data)
+
+    return result
 
 
 # ===================== #ANCHOR - DATA HISTORY ========================= #
