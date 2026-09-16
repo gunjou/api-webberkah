@@ -43,11 +43,35 @@ def get_transaction_list(filters: dict):
             t.amount,
             t.attachment_url,
             t.created_by,
-            t.created_at
+            t.created_at,
+            pr.id_request,
+            pr.note,
+            COALESCE(
+                (
+                    SELECT json_agg(
+                        json_build_object(
+                            'id_item', pri.id_item,
+                            'item_no', pri.item_no,
+                            'keterangan', pri.keterangan,
+                            'unit', pri.unit,
+                            'harga_satuan', pri.harga_satuan,
+                            'jumlah', pri.jumlah,
+                            'total', pri.total
+                        )
+                        ORDER BY pri.item_no
+                    )
+                    FROM purchase_request_items pri
+                    WHERE pri.id_request = t.id_request
+                ),
+                '[]'::json
+            ) AS items
         FROM transactions t
         INNER JOIN categories c
             ON c.id_category = t.id_category
            AND c.is_reportable = 1
+        LEFT JOIN purchase_requests pr
+            ON pr.id_request = t.id_request
+           AND pr.is_active = 1
         WHERE
             t.is_active = 1
     """
@@ -448,6 +472,7 @@ def get_transaction_detail(id_transaction: int):
 def create_transaction(
     id_account: int,
     id_category: int,
+    id_request: int,
     transaction_date: str,
     transaction_type: str,
     amount: float,
@@ -462,6 +487,7 @@ def create_transaction(
         (
             id_account,
             id_category,
+            id_request,
             transaction_date,
             transaction_type,
             amount,
@@ -476,6 +502,7 @@ def create_transaction(
         (
             :id_account,
             :id_category,
+            :id_request,
             :transaction_date,
             :transaction_type,
             :amount,
@@ -490,6 +517,7 @@ def create_transaction(
             id_transaction,
             id_account,
             id_category,
+            id_request,
             transaction_date,
             transaction_type,
             amount,
@@ -508,6 +536,7 @@ def create_transaction(
             {
                 "id_account": id_account,
                 "id_category": id_category,
+                "id_request": id_request,
                 "transaction_date": transaction_date,
                 "transaction_type": transaction_type,
                 "amount": amount,

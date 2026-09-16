@@ -164,6 +164,7 @@ def get_transaction_detail_service(id_transaction: int):
 def create_transaction_service(
     id_account: int,
     id_category: int,
+    id_request: int,
     transaction_date: str,
     transaction_type: str,
     amount: float,
@@ -182,6 +183,7 @@ def create_transaction_service(
     return create_transaction(
         id_account=id_account,
         id_category=id_category,
+        id_request=id_request,
         transaction_date=transaction_date,
         transaction_type=transaction_type,
         amount=amount,

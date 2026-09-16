@@ -19,6 +19,7 @@ transaction_model = ns.model(
     "Transaction", {
         "id_account": fields.Integer(required=True, description="Account ID"),
         "id_category": fields.Integer(required=True, description="Category ID"),
+        "id_request": fields.Integer(required=False),
         "transaction_date": fields.String(required=True, description="Transaction Date"),
         "transaction_type": fields.String(required=True, enum=["IN", "OUT"]),
         "amount": fields.Float(required=True),
@@ -115,6 +116,7 @@ class TransactionListResource(Resource):
         data = create_transaction_service(
             id_account=payload["id_account"],
             id_category=payload["id_category"],
+            id_request=payload.get("id_request", None),
             transaction_date=payload["transaction_date"],
             transaction_type=payload["transaction_type"],
             amount=payload["amount"],
