@@ -390,6 +390,8 @@ class PurchaseRequestReviewResource(Resource):
 
         if claims.get("account_type") != "admin":
             raise ValidationError("Hanya admin yang dapat melakukan review.")
+        
+        id_admin = int(get_jwt_identity())
 
         body = request.get_json(silent=True) or {}
 
@@ -400,6 +402,7 @@ class PurchaseRequestReviewResource(Resource):
 
         review_purchase_request_service(
             id_request=id_request,
+            id_admin=id_admin,
             nama_pegawai=display_name,
             note=body.get("note")
         )
@@ -422,6 +425,8 @@ class PurchaseRequestApproveResource(Resource):
 
         if claims.get("account_type") != "admin":
             raise ValidationError("Hanya admin yang dapat melakukan approval.")
+        
+        id_admin = int(get_jwt_identity())
 
         body = request.get_json(silent=True) or {}
 
@@ -432,6 +437,7 @@ class PurchaseRequestApproveResource(Resource):
 
         approve_purchase_request_service(
             id_request=id_request,
+            id_admin=id_admin,
             nama_pegawai=nama_pegawai,
             note=body.get("note")
         )
@@ -454,6 +460,8 @@ class PurchaseRequestRejectResource(Resource):
 
         if claims.get("account_type") != "admin":
             raise ValidationError("Hanya admin yang dapat melakukan reject.")
+        
+        id_admin = int(get_jwt_identity())
 
         body = request.get_json(silent=True) or {}
 
@@ -467,6 +475,7 @@ class PurchaseRequestRejectResource(Resource):
 
         reject_purchase_request_service(
             id_request=id_request,
+            id_admin=id_admin,
             nama_pegawai=nama_pegawai,
             note=body["note"].strip()
         )
@@ -489,6 +498,8 @@ class PurchaseRequestPaidResource(Resource):
 
         if claims.get("account_type") != "admin":
             raise ValidationError("Hanya admin yang dapat menandai pengajuan sebagai paid.")
+        
+        id_admin = int(get_jwt_identity())
 
         body = request.get_json(silent=True) or {}
 
@@ -499,6 +510,7 @@ class PurchaseRequestPaidResource(Resource):
 
         mark_purchase_request_paid_service(
             id_request=id_request,
+            id_admin=id_admin,
             nama_pegawai=nama_pegawai,
             note=body.get("note")
         )

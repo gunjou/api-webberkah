@@ -104,6 +104,7 @@ def create_purchase_request_service(body: dict):
             id_request=id_request,
             status="REQUESTED",
             nama_pegawai=pegawai["nama_lengkap"],
+            signature_path=pegawai["signature_path"],
             note=body.get("note"),
             now=now
         )
@@ -203,6 +204,7 @@ def create_purchase_request_admin_service(body: dict):
             id_request=id_request,
             status="REQUESTED",
             nama_pegawai=pegawai["nama_lengkap"],
+            signature_path=pegawai["signature_path"],
             note=body.get("note"),
             now=now
         )
@@ -536,13 +538,18 @@ def delete_purchase_request_service(id_request: int, id_pegawai: int, is_admin: 
 
 # ======================== #ANCHOR - REVIEW REQUEST =========================== #
 
-def review_purchase_request_service(id_request: int, nama_pegawai: str, note: str = None):
+def review_purchase_request_service(id_request: int, id_admin: int, nama_pegawai: str, note: str = None):
 
     with engine.begin() as conn:
 
         request_data = get_purchase_request_for_status_update(
             conn=conn,
             id_request=id_request
+        )
+        
+        signature = get_signature_admin_path(
+            conn=conn,
+            id_admin=id_admin
         )
 
         if not request_data:
@@ -568,6 +575,7 @@ def review_purchase_request_service(id_request: int, nama_pegawai: str, note: st
             conn=conn,
             id_request=id_request,
             status="REVIEWED",
+            signature_path=signature["signature_path"],
             nama_pegawai=nama_pegawai,
             note=note,
             now=now
@@ -576,13 +584,18 @@ def review_purchase_request_service(id_request: int, nama_pegawai: str, note: st
 
 # ======================= #ANCHOR - APPROVE REQUEST =========================== #
 
-def approve_purchase_request_service(id_request: int, nama_pegawai: str, note: str = None):
+def approve_purchase_request_service(id_request: int, id_admin: int, nama_pegawai: str, note: str = None):
 
     with engine.begin() as conn:
 
         request_data = get_purchase_request_for_status_update(
             conn=conn,
             id_request=id_request
+        )
+        
+        signature = get_signature_admin_path(
+            conn=conn,
+            id_admin=id_admin
         )
 
         if not request_data:
@@ -608,6 +621,7 @@ def approve_purchase_request_service(id_request: int, nama_pegawai: str, note: s
             conn=conn,
             id_request=id_request,
             status="APPROVED",
+            signature_path=signature["signature_path"],
             nama_pegawai=nama_pegawai,
             note=note,
             now=now
@@ -616,13 +630,18 @@ def approve_purchase_request_service(id_request: int, nama_pegawai: str, note: s
 
 # ======================== #ANCHOR - REJECT REQUEST =========================== #
 
-def reject_purchase_request_service(id_request: int, nama_pegawai: str, note: str):
+def reject_purchase_request_service(id_request: int, id_admin: int, nama_pegawai: str, note: str):
 
     with engine.begin() as conn:
 
         request_data = get_purchase_request_for_status_update(
             conn=conn,
             id_request=id_request
+        )
+        
+        signature = get_signature_admin_path(
+            conn=conn,
+            id_admin=id_admin
         )
 
         if not request_data:
@@ -648,6 +667,7 @@ def reject_purchase_request_service(id_request: int, nama_pegawai: str, note: st
             conn=conn,
             id_request=id_request,
             status="REJECTED",
+            signature_path=signature["signature_path"],
             nama_pegawai=nama_pegawai,
             note=note,
             now=now
@@ -656,13 +676,18 @@ def reject_purchase_request_service(id_request: int, nama_pegawai: str, note: st
 
 # ========================= #ANCHOR - PAID REQUEST ============================ #
 
-def mark_purchase_request_paid_service(id_request: int, nama_pegawai: str, note: str = None):
+def mark_purchase_request_paid_service(id_request: int, id_admin: int, nama_pegawai: str, note: str = None):
 
     with engine.begin() as conn:
 
         request_data = get_purchase_request_for_status_update(
             conn=conn,
             id_request=id_request
+        )
+        
+        signature = get_signature_admin_path(
+            conn=conn,
+            id_admin=id_admin
         )
 
         if not request_data:
@@ -688,6 +713,7 @@ def mark_purchase_request_paid_service(id_request: int, nama_pegawai: str, note:
             conn=conn,
             id_request=id_request,
             status="PAID",
+            signature_path=signature["signature_path"],
             nama_pegawai=nama_pegawai,
             note=note,
             now=now

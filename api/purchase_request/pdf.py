@@ -308,19 +308,44 @@ def _note_section(pr, styles):
 
 
 def _approval_data(history):
-    result = {status: {"date": None, "pegawai": None} for status in ["REQUESTED", "REVIEWED", "APPROVED", "PAID"]}
+    result = {
+        status: {
+            "date": None,
+            "pegawai": None,
+            "signature_path": None,
+        }
+        for status in [
+            "REQUESTED",
+            "REVIEWED",
+            "APPROVED",
+            "PAID",
+        ]
+    }
 
     for row in history or []:
-        status = str(row.get("status") or "").strip().upper()
+        status = str(
+            row.get("status") or ""
+        ).strip().upper()
+
         if status in result:
-            result[status] = {"date": row.get("created_at"), "pegawai": row.get("nama_pegawai")}
+            result[status] = {
+                "date": row.get("created_at"),
+                "pegawai": row.get("nama_pegawai"),
+                "signature_path": row.get("signature_path"),
+            }
 
     return result
 
 
 def _approval_table(history, styles):
     approvals = _approval_data(history)
-    statuses = ["REQUESTED", "REVIEWED", "APPROVED", "PAID"]
+
+    statuses = [
+        "REQUESTED",
+        "REVIEWED",
+        "APPROVED",
+        "PAID",
+    ]
 
     status_style = ParagraphStyle(
         "ApprovalStatus",
@@ -329,6 +354,7 @@ def _approval_table(history, styles):
         leading=10,
         alignment=TA_CENTER,
     )
+
     name_style = ParagraphStyle(
         "ApprovalName",
         parent=styles["approval_date"],
@@ -336,6 +362,7 @@ def _approval_table(history, styles):
         leading=10,
         alignment=TA_CENTER,
     )
+
     line_style = ParagraphStyle(
         "ApprovalLine",
         parent=styles["approval_date"],
@@ -345,45 +372,108 @@ def _approval_table(history, styles):
         textColor=DARK_GREY,
     )
 
-    col_width = (PAGE_WIDTH - (MARGIN_X * 2)) / 4
+    col_width = (
+        PAGE_WIDTH - (MARGIN_X * 2)
+    ) / 4
+
+    # =================================================
+    # HEADER APPROVAL
+    # =================================================
 
     header = Table(
-        [[Paragraph(status, status_style) for status in statuses]],
+        [[
+            Paragraph(status, status_style)
+            for status in statuses
+        ]],
         colWidths=[col_width] * 4,
         hAlign="LEFT",
     )
+
     header.setStyle(TableStyle([
         ("GRID", (0, 0), (-1, -1), 0.5, BORDER),
         ("BACKGROUND", (0, 0), (-1, -1), LIGHT_GREY),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+
         ("LEFTPADDING", (0, 0), (-1, -1), 5),
         ("RIGHTPADDING", (0, 0), (-1, -1), 5),
         ("TOPPADDING", (0, 0), (-1, -1), 6),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
 
-    body = Table(
-        [[
-            Paragraph(
-                f"{_format_approval_date(approvals[s]['date'])}"
-                f"<br/><br/><br/><br/>"
-                f"{_safe(approvals[s]['pegawai'])}"
-                f"<br/>____________________",
-                name_style,
+    # =================================================
+    # BODY APPROVAL
+    # =================================================
+
+    body_cells = []
+
+    for status in statuses:
+        approval = approvals[status]
+
+        signature = _signature_to_flowable(
+            approval.get("signature_path")
+        )
+
+        signature_content = []
+
+        # =============================================
+        # SIGNATURE
+        # =============================================
+
+        if signature:
+            signature_content.append(
+                signature
             )
-            for s in statuses
-        ]],
+
+        else:
+            # =========================================
+            # FALLBACK JIKA TIDAK ADA SIGNATURE
+            # =========================================
+
+            signature_content.append(
+                Spacer(
+                    1,
+                    SIGNATURE_MAX_HEIGHT
+                )
+            )
+
+        # =============================================
+        # NAMA DAN GARIS TTD
+        # =============================================
+
+        signature_content.extend([
+            Spacer(1, 2),
+
+            Paragraph(
+                _safe(approval.get("pegawai")),
+                name_style,
+            ),
+
+            Paragraph(
+                "____________________",
+                line_style,
+            ),
+        ])
+
+        body_cells.append(
+            signature_content
+        )
+
+    body = Table(
+        [body_cells],
         colWidths=[col_width] * 4,
         hAlign="LEFT",
     )
+
     body.setStyle(TableStyle([
         ("BOX", (0, 0), (0, 0), 0.5, BORDER),
         ("BOX", (1, 0), (1, 0), 0.5, BORDER),
         ("BOX", (2, 0), (2, 0), 0.5, BORDER),
         ("BOX", (3, 0), (3, 0), 0.5, BORDER),
+
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+
         ("LEFTPADDING", (0, 0), (-1, -1), 5),
         ("RIGHTPADDING", (0, 0), (-1, -1), 5),
         ("TOPPADDING", (0, 0), (-1, -1), 7),
@@ -395,6 +485,74 @@ def _approval_table(history, styles):
         Spacer(1, 4),
         body,
     ]
+
+
+# =====================================================
+# SIGNATURE
+# =====================================================
+
+SIGNATURE_MAX_WIDTH = 32 * mm
+SIGNATURE_MAX_HEIGHT = 18 * mm
+
+
+def _signature_to_flowable(signature_path):
+    """
+    Download signature PNG dari CDN dan mengubahnya
+    menjadi ReportLab Image.
+
+    Ukuran area seragam untuk setiap approval.
+    Rasio gambar tetap dipertahankan.
+    """
+
+    if not signature_path:
+        return None
+
+    try:
+        response = requests.get(
+            signature_path,
+            timeout=15
+        )
+
+        response.raise_for_status()
+
+        image_bytes = response.content
+
+        image_reader = ImageReader(
+            BytesIO(image_bytes)
+        )
+
+        image_width, image_height = (
+            image_reader.getSize()
+        )
+
+        if image_width <= 0 or image_height <= 0:
+            return None
+
+        # =============================================
+        # PRESERVE ASPECT RATIO
+        # =============================================
+
+        ratio = min(
+            SIGNATURE_MAX_WIDTH / image_width,
+            SIGNATURE_MAX_HEIGHT / image_height,
+        )
+
+        display_width = image_width * ratio
+        display_height = image_height * ratio
+
+        return Image(
+            BytesIO(image_bytes),
+            width=display_width,
+            height=display_height,
+        )
+
+    except (
+        requests.RequestException,
+        OSError,
+        ValueError,
+        TypeError,
+    ):
+        return None
 
 
 def _payment_table(pr, styles):

@@ -14,11 +14,13 @@ def get_active_pegawai(conn, id_pegawai: int):
 
     sql = text("""
         SELECT
-            id_pegawai, nama_lengkap, id_departemen
-        FROM pegawai
+            p.id_pegawai, p.nama_lengkap, p.id_departemen, ap.signature_path
+        FROM pegawai p
+        INNER JOIN auth_pegawai ap
+            ON ap.id_pegawai = p.id_pegawai AND ap.status = 1
         WHERE
-            id_pegawai = :id_pegawai
-            AND status = 1
+            p.id_pegawai = :id_pegawai
+            AND p.status = 1
         LIMIT 1
     """)
 
@@ -841,14 +843,14 @@ def update_purchase_request_status(conn, id_request: int, status: str, now):
 
 # ======================= #ANCHOR - CREATE HISTORY ============================ #
 
-def create_purchase_request_history(conn, id_request: int, status: str, nama_pegawai: str, note, now):
+def create_purchase_request_history(conn, id_request: int, status: str, nama_pegawai: str, signature_path: str, note, now):
 
     sql = text("""
         INSERT INTO purchase_request_histories (
-            id_request, status, nama_pegawai, note, is_active, created_at
+            id_request, status, nama_pegawai, note, signature_path, is_active, created_at
         )
         VALUES (
-            :id_request, :status, :nama_pegawai, :note, 1, :now
+            :id_request, :status, :nama_pegawai, :note, :signature_path, 1, :now
         )
     """)
 
@@ -857,6 +859,7 @@ def create_purchase_request_history(conn, id_request: int, status: str, nama_peg
         {
             "id_request": id_request,
             "status": status,
+            "signature_path": signature_path,
             "nama_pegawai": nama_pegawai,
             "note": note,
             "now": now
@@ -930,6 +933,27 @@ def update_purchase_request_inactive(conn, id_request: int):
 # ============================================================================ #
 #                            #SECTION - STATUS UPDATE                          #
 # ============================================================================ #
+
+# ======================= #ANCHOR - REQUEST FOR REVIEW ======================== #
+
+def get_signature_admin_path(conn, id_admin: int):
+
+    sql = text("""
+        SELECT
+            signature_path
+        FROM auth_admin
+        WHERE
+            id_admin = :id_admin
+            AND status = 1
+        LIMIT 1
+    """)
+
+    return conn.execute(
+        sql,
+        {
+            "id_admin": id_admin
+        }
+    ).mappings().first()
 
 # ======================= #ANCHOR - REQUEST FOR REVIEW ======================== #
 
@@ -1212,6 +1236,7 @@ def get_purchase_request_pdf_history(id_request: int):
             status,
             nama_pegawai,
             note,
+            signature_path,
             created_at
         FROM purchase_request_histories
         WHERE
