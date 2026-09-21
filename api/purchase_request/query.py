@@ -531,12 +531,14 @@ def get_purchase_request_detail(id_request: int, account_type: str, id_pegawai: 
             pr.id_request, pr.request_number, pr.tanggal_request, pr.nama_pekerjaan, pr.priority, pr.status, pr.note, 
             pr.total_amount, p.id_pegawai, p.nama_lengkap, p.nama_panggilan, d.id_departemen, d.nama_departemen, 
             pr.payment_description, pr.payment_bank, pr.payment_account_number, pr.payment_account_name, 
-            pr.attachment_name, pr.attachment_path, pr.created_at, pr.updated_at
+            pr.attachment_name, pr.attachment_path, tr.attachment_url as bukti_bayar, pr.created_at, pr.updated_at
         FROM purchase_requests pr
         INNER JOIN pegawai p
             ON p.id_pegawai = pr.id_pegawai
         INNER JOIN ref_departemen d
             ON d.id_departemen = pr.id_departemen
+        LEFT JOIN transactions tr
+            ON tr.id_request = pr.id_request AND tr.is_active = 1
         WHERE
             pr.id_request = :id_request
             AND pr.is_active = 1
@@ -617,7 +619,8 @@ def get_purchase_request_detail(id_request: int, account_type: str, id_pegawai: 
             "description": request["payment_description"],
             "bank": request["payment_bank"],
             "account_number": request["payment_account_number"],
-            "account_name": request["payment_account_name"]
+            "account_name": request["payment_account_name"],
+            "bukti_bayar": request["bukti_bayar"] if request["bukti_bayar"] else None,
         },
         "attachment": (
             {
