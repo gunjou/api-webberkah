@@ -14,9 +14,9 @@ def get_dashboard_notifikasi_count():
     - izin pending
     - lembur pending
     """
+
     sql = text("""
         SELECT
-            -- izin pending
             (
                 SELECT COUNT(*)
                 FROM izin
@@ -24,7 +24,6 @@ def get_dashboard_notifikasi_count():
                   AND status_approval = 'pending'
             ) AS izin_pending,
 
-            -- lembur pending
             (
                 SELECT COUNT(*)
                 FROM lembur

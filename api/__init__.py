@@ -34,6 +34,11 @@ from api.cashbook.opening_balance import ns as opening_balance_ns
 from api.cashbook.dashboard import ns as cashbook_dashboard_ns
 
 from api.work_item.master import ns as work_item_master_ns
+from api.work_item.work import ns as work_item_ns
+from api.work_item.quotation import ns as quotation_ns
+from api.work_item.contract import ns as contract_ns
+from api.work_item.completion import ns as completion_ns
+from api.work_item.invoice import ns as invoice_ns
 
 from api.purchase_request import ns as purchase_request_ns
 
@@ -160,6 +165,11 @@ api.add_namespace(opening_balance_ns, path="/cashbook/opening-balance")
 api.add_namespace(cashbook_dashboard_ns, path="/cashbook/dashboard")
 
 api.add_namespace(work_item_master_ns, path="/work-item/master")
+api.add_namespace(work_item_ns, path="/work-item/work")
+api.add_namespace(quotation_ns, path="/work-item/quotation")
+api.add_namespace(contract_ns, path="/work-item/contract")
+api.add_namespace(completion_ns, path="/work-item/completion")
+api.add_namespace(invoice_ns, path="/work-item/invoice")
 
 api.add_namespace(purchase_request_ns, path="/purchase-requests")
 

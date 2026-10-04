@@ -11,6 +11,17 @@ from api.query.q_dashboard import *
 dashboard_ns = Namespace("dashboard", description="Dashboard Admin")
 
 
+dashboard_notifikasi_count_parser = dashboard_ns.parser()
+dashboard_notifikasi_count_parser.add_argument(
+    "role",
+    type=str,
+    required=False,
+    default=None,
+    choices=("hr", "finance", "contract_invoice"),
+    location="args",
+    help="Role notifikasi: hr, finance, atau contract_invoice"
+)
+
 # ======================================================================
 # ENDPOINT COUNT TOTAL NOTIFIKASI DI LONCENG NAVBAR (ADMIN/WEBBERKAH)
 # ======================================================================
@@ -19,12 +30,53 @@ class DashboardNotifikasiCountResource(Resource):
 
     @jwt_required()
     @role_required("admin")
+    @dashboard_ns.expect(dashboard_notifikasi_count_parser)
     @measure_execution_time
     def get(self):
         """
-        (admin) Count notifikasi izin & lembur pending
+        (admin) Count notifikasi berdasarkan role
         """
 
+        args = dashboard_notifikasi_count_parser.parse_args()
+        role = args.get("role")
+
+        # Role HR
+        if role == "hr":
+            # TODO: Tambahkan logic notifikasi untuk HR
+            return success(
+                message="Jumlah notifikasi pending",
+                data={
+                    "izin_pending": 0,
+                    "lembur_pending": 0,
+                    "total": 0
+                }
+            )
+
+        # Role Finance
+        if role == "finance":
+            # TODO: Tambahkan logic notifikasi untuk Finance
+            return success(
+                message="Jumlah notifikasi pending",
+                data={
+                    "izin_pending": 0,
+                    "lembur_pending": 0,
+                    "total": 0
+                }
+            )
+
+        # Role Contract & Invoice
+        if role == "contract_invoice":
+            # TODO: Tambahkan logic notifikasi untuk Contract & Invoice
+            return success(
+                message="Jumlah notifikasi pending",
+                data={
+                    "izin_pending": 0,
+                    "lembur_pending": 0,
+                    "total": 0
+                }
+            )
+
+        # Default: notifikasi izin & lembur
         result = get_dashboard_notifikasi_count()
 
         izin_pending = result["izin_pending"] or 0
