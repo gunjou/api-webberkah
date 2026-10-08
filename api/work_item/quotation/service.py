@@ -8,22 +8,36 @@ from .query import *
 
 def get_quotation_list_service(filters: dict):
 
-    page = filters.get("page", 1)
-    per_page = filters.get("per_page", 10)
+    stage = filters.get("stage", "ACTIVE")
+    page = filters.get("page")
+    per_page = filters.get("per_page")
 
-    if page < 1:
+    # =========================== Pagination Validation ========================== #
+
+    if page is not None and page < 1:
         raise ValidationError("Page harus lebih besar atau sama dengan 1.")
 
-    if per_page < 1:
-        raise ValidationError("Per page harus lebih besar atau sama dengan 1.")
+    if per_page is not None and per_page < 25:
+        raise ValidationError("Per page minimal 25.")
 
-    if per_page > 100:
+    if per_page is not None and per_page > 100:
         raise ValidationError("Per page maksimal 100.")
 
+    if (page is None) != (per_page is None):
+        raise ValidationError("Page dan per page harus diisi bersamaan.")
+
+    # ==================== Active tidak menggunakan pagination =================== #
+
+    if stage == "ACTIVE":
+        page = None
+        per_page = None
+
     return get_quotation_list(
+        stage=stage,
         search=filters.get("search"),
         status=filters.get("status"),
         id_work_item=filters.get("id_work_item"),
+        id_client=filters.get("id_client"),
         page=page,
         per_page=per_page
     )
@@ -48,6 +62,13 @@ def create_quotation_service(body: dict):
 
     if not work_item:
         raise NotFoundError("Work item tidak ditemukan.")
+
+    # ---------------------------------------------------------------------- #
+    # Validate Work Item Stage
+    # ---------------------------------------------------------------------- #
+
+    if work_item["current_stage"] != "IDENTIFIED":
+        raise ValidationError("Penawaran hanya dapat dibuat ketika work item berada pada stage IDENTIFIED.")
 
     # ---------------------------------------------------------------------- #
     # Check duplicate quotation number
@@ -82,6 +103,10 @@ def create_quotation_service(body: dict):
         raise ValidationError("Status penawaran tidak valid.")
 
     body["status"] = status
+
+    # ---------------------------------------------------------------------- #
+    # Create Quotation + Update Stage
+    # ---------------------------------------------------------------------- #
 
     return create_quotation(body)
 
@@ -162,17 +187,27 @@ def update_quotation_service(id_proposal, body, updated_by):
     )
 
 
-def delete_quotation_service(id_proposal, updated_by):
-
-    if not id_proposal:
-        raise ValidationError("ID penawaran wajib diisi")
-
+def delete_quotation_service(id_proposal: int, updated_by: str):
+    
     quotation = get_quotation_by_id(id_proposal)
 
     if not quotation:
-        raise NotFoundError("Penawaran tidak ditemukan")
+        raise NotFoundError("Penawaran tidak ditemukan.")
 
-    delete_quotation(
+    work_item = get_work_item_by_id(quotation["id_work_item"])
+
+    if not work_item:
+        raise NotFoundError("Work item tidak ditemukan.")
+
+    # ---------------------------------------------------------------------- #
+    # Validate Current Stage
+    # ---------------------------------------------------------------------- #
+
+    if work_item["current_stage"] != "QUOTATION":
+        raise ValidationError("Penawaran hanya dapat dihapus ketika work item berada pada stage QUOTATION.")
+
+    return delete_quotation(
         id_proposal=id_proposal,
+        id_work_item=quotation["id_work_item"],
         updated_by=updated_by
     )

@@ -46,11 +46,13 @@ contract_update_model = ns.model(
 # ======================= #ANCHOR - FILTER PARSER ============================ #
 
 contract_filter_parser = ns.parser()
-contract_filter_parser.add_argument("search", type=str, required=False, location="args")
-contract_filter_parser.add_argument("status", type=str, required=False, choices=["ACTIVE", "COMPLETED", "CANCELLED"], location="args")
-contract_filter_parser.add_argument("id_work_item", type=int, required=False, location="args")
-contract_filter_parser.add_argument("page", type=int, required=False, default=1, location="args")
-contract_filter_parser.add_argument("per_page", type=int, required=False, default=10, location="args")
+contract_filter_parser.add_argument("stage", type=str, required=False, default="ACTIVE", choices=("ACTIVE", "CLOSED"), location="args", help="Filter berdasarkan stage Work Item. ACTIVE untuk semua stage selain CLOSED, CLOSED untuk Work Item yang sudah ditutup.")
+contract_filter_parser.add_argument("status", type=str, required=False, choices=("ACTIVE", "COMPLETED", "CANCELLED"), location="args", help="Filter berdasarkan status contract.")
+contract_filter_parser.add_argument("search", type=str, required=False, location="args", help="Search by contract number, work number, work name, or client name.")
+contract_filter_parser.add_argument("id_work_item", type=int, required=False, location="args", help="Filter by work item ID.")
+contract_filter_parser.add_argument("id_client", type=int, required=False, location="args", help="Filter by client ID.")
+contract_filter_parser.add_argument("page", type=int, required=False, location="args", help="Page number. Only used when stage=CLOSED.")
+contract_filter_parser.add_argument("per_page", type=int, required=False, location="args", help="Number of records per page. Minimum 25 and only used when stage=CLOSED.")
 
 
 # ============================================================================ #
@@ -137,14 +139,13 @@ class ContractDetailResource(Resource):
     def delete(self, id_contract):
         """Delete Work Item Contract"""
 
-        updated_by = get_jwt().get("display_name")
+        created_by = get_jwt().get("display_name")
 
         delete_contract_service(
             id_contract=id_contract,
-            updated_by=updated_by
+            updated_by=created_by
         )
 
         return success(
-            data=None,
-            message="Kontrak berhasil dihapus"
+            message="Kontrak berhasil dihapus."
         )

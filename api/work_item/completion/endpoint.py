@@ -39,10 +39,12 @@ completion_edit_model = ns.model(
 # ======================= #ANCHOR - FILTER PARSER ============================ #
 
 completion_filter_parser = ns.parser()
-completion_filter_parser.add_argument( "search", type=str, required=False, location="args")
-completion_filter_parser.add_argument( "id_work_item", type=int, required=False, location="args")
-completion_filter_parser.add_argument( "page", type=int, required=False, default=1, location="args")
-completion_filter_parser.add_argument( "per_page", type=int, required=False, default=10, location="args")
+completion_filter_parser.add_argument("stage", type=str, required=False, default="ACTIVE", choices=("ACTIVE", "CLOSED"), location="args", help="Filter berdasarkan stage Work Item. ACTIVE untuk semua stage selain CLOSED, CLOSED untuk Work Item yang sudah ditutup.")
+completion_filter_parser.add_argument("search", type=str, required=False, location="args", help="Search by BA number, work number, work name, or client name.")
+completion_filter_parser.add_argument("id_work_item", type=int, required=False, location="args", help="Filter by work item ID.")
+completion_filter_parser.add_argument("id_client", type=int, required=False, location="args", help="Filter by client ID.")
+completion_filter_parser.add_argument("page", type=int, required=False, location="args", help="Page number. Only used when stage=CLOSED.")
+completion_filter_parser.add_argument("per_page", type=int, required=False, location="args", help="Number of records per page. Minimum 25 and only used when stage=CLOSED.")
 
 completion_options_parser = ns.parser()
 completion_options_parser.add_argument("context", type=str, required=False, choices=("invoice"), location="args", help="Konteks options: invoice")

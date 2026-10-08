@@ -39,6 +39,7 @@ from api.work_item.quotation import ns as quotation_ns
 from api.work_item.contract import ns as contract_ns
 from api.work_item.completion import ns as completion_ns
 from api.work_item.invoice import ns as invoice_ns
+from api.work_item.payment import ns as payment_ns
 
 from api.purchase_request import ns as purchase_request_ns
 
@@ -170,6 +171,7 @@ api.add_namespace(quotation_ns, path="/work-item/quotation")
 api.add_namespace(contract_ns, path="/work-item/contract")
 api.add_namespace(completion_ns, path="/work-item/completion")
 api.add_namespace(invoice_ns, path="/work-item/invoice")
+api.add_namespace(payment_ns, path="/work-item/payment")
 
 api.add_namespace(purchase_request_ns, path="/purchase-requests")
 

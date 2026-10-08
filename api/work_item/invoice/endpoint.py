@@ -44,11 +44,13 @@ invoice_edit_model = ns.model(
 # ======================= #ANCHOR - FILTER PARSER ============================ #
 
 invoice_parser = ns.parser()
-invoice_parser.add_argument( "search", type=str, required=False, location="args", help="Cari nomor invoice, nomor work item, nama pekerjaan, atau nama client")
-invoice_parser.add_argument( "id_work_item", type=int, required=False, location="args", help="Filter berdasarkan Work Item")
-invoice_parser.add_argument( "id_completion", type=int, required=False, location="args", help="Filter berdasarkan BA")
-invoice_parser.add_argument( "page", type=int, required=False, default=1, location="args")
-invoice_parser.add_argument( "per_page", type=int, required=False, default=10, location="args")
+invoice_parser.add_argument( "stage", type=str, required=False, default="ACTIVE", location="args", choices=("ACTIVE", "CLOSED"), help="Filter stage work item. ACTIVE untuk semua stage selain CLOSED, CLOSED untuk work item yang sudah ditutup.")
+invoice_parser.add_argument( "health_status", type=str, required=False, location="args", choices=("PAID", "OVERDUE", "DUE_SOON", "ON_TRACK"), help="Filter berdasarkan kondisi kesehatan invoice.")
+invoice_parser.add_argument( "id_client", type=int, required=False, location="args", help="Filter berdasarkan Client.")
+invoice_parser.add_argument( "payment_status", type=str, required=False, location="args", choices=("PAID", "UNPAID"), help="Filter berdasarkan status pembayaran.")
+invoice_parser.add_argument( "search", type=str, required=False, location="args", help="Cari nomor invoice, nomor work item, nama pekerjaan, atau nama client.")
+invoice_parser.add_argument( "page", type=int, required=False, location="args", help="Halaman data. Hanya digunakan ketika stage=CLOSED.")
+invoice_parser.add_argument( "per_page", type=int, required=False, location="args", help="Jumlah data per halaman. Hanya digunakan ketika stage=CLOSED.")
 
 
 # ============================================================================ #

@@ -8,22 +8,38 @@ from .query import *
 
 def get_work_item_list_service(filters: dict):
 
-    page = filters.get("page", 1)
-    per_page = filters.get("per_page", 10)
+    stage = filters.get("stage", "ACTIVE")
 
-    if page < 1:
+    page = filters.get("page")
+    per_page = filters.get("per_page")
+
+    # ============================ VALIDATE PAGINATION =========================== #
+
+    if page is not None and page < 1:
         raise ValidationError("Page harus lebih besar atau sama dengan 1.")
 
-    if per_page < 1:
-        raise ValidationError("Per page harus lebih besar atau sama dengan 1.")
+    if per_page is not None and per_page < 25:
+        raise ValidationError("Per page minimal 25.")
 
-    if per_page > 100:
+    if per_page is not None and per_page > 100:
         raise ValidationError("Per page maksimal 100.")
 
+    # ==================== PAGE DAN PER PAGE HARUS BERPASANGAN =================== #
+
+    if (page is None) != (per_page is None):
+        raise ValidationError("Page dan per page harus diisi bersamaan.")
+
+    # ==================== ACTIVE TIDAK MENGGUNAKAN PAGINATION =================== #
+
+    if stage == "ACTIVE":
+        page = None
+        per_page = None
+
     return get_work_item_list(
+        stage=stage,
+        current_stage=filters.get("current_stage"),
         search=filters.get("search"),
         work_type=filters.get("work_type"),
-        current_stage=filters.get("current_stage"),
         id_client=filters.get("id_client"),
         page=page,
         per_page=per_page
@@ -177,4 +193,43 @@ def get_work_item_options_service(context=None):
 
     return get_work_item_options(
         context=context
+    )
+
+
+def update_work_progress_service(id_work_item, data, updated_by):
+    
+    work_item = get_work_item_by_id(id_work_item)
+
+    if not work_item:
+        raise NotFoundError("Work Item tidak ditemukan")
+
+    progress_percent = data.get("progress_percent")
+
+    if progress_percent is None:
+        raise ValidationError("Progress pekerjaan wajib diisi")
+
+    try:
+        progress_percent = float(progress_percent)
+    except (TypeError, ValueError):
+        raise ValidationError("Progress pekerjaan harus berupa angka")
+
+    if progress_percent < 0 or progress_percent > 100:
+        raise ValidationError("Progress pekerjaan harus berada di antara 0 sampai 100")
+
+    progress_date = data.get("progress_date")
+    notes = data.get("notes")
+
+    return update_work_progress(
+        id_work_item=id_work_item,
+        progress_percent=progress_percent,
+        progress_date=progress_date,
+        notes=notes,
+        updated_by=updated_by
+    )
+
+
+def close_work_item_service(id_work_item, updated_by):
+    return close_work_item(
+        id_work_item=id_work_item,
+        updated_by=updated_by
     )

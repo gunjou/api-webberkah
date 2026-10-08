@@ -46,11 +46,13 @@ quotation_update_model = ns.model(
 # ======================= #ANCHOR - FILTER PARSER ============================ #
 
 quotation_filter_parser = ns.parser()
+quotation_filter_parser.add_argument("stage", type=str, required=False, default="ACTIVE", choices=("ACTIVE", "CLOSED"), location="args", help="Filter berdasarkan status quotation. ACTIVE untuk quotation aktif, CLOSED untuk quotation yang sudah ditutup/dihapus.")
+quotation_filter_parser.add_argument("status", type=str, required=False, choices=("DRAFT", "SUBMITTED", "WON", "LOST", "EXPIRED", "CANCELLED"), location="args", help="Filter berdasarkan quotation status.")
 quotation_filter_parser.add_argument("search", type=str, required=False, location="args", help="Search by quotation number.")
-quotation_filter_parser.add_argument("status", type=str, required=False, choices=("DRAFT", "SUBMITTED", "WON", "LOST", "EXPIRED", "CANCELLED"), location="args", help="Filter by quotation status.")
 quotation_filter_parser.add_argument("id_work_item", type=int, required=False, location="args", help="Filter by work item ID.")
-quotation_filter_parser.add_argument("page", type=int, required=False, default=1, location="args", help="Page number.")
-quotation_filter_parser.add_argument("per_page", type=int, required=False, default=10, location="args", help="Number of records per page.")
+quotation_filter_parser.add_argument("id_client", type=int, required=False, location="args", help="Filter by client ID.")
+quotation_filter_parser.add_argument("page", type=int, required=False, location="args", help="Page number. Only used when stage=CLOSED.")
+quotation_filter_parser.add_argument("per_page", type=int, required=False, location="args", help="Number of records per page. Minimum 25 and only used when stage=CLOSED.")
 
 # ============================================================================ #
 #                         #SECTION - QUOTATION                                 #
@@ -134,7 +136,7 @@ class QuotationDetailResource(Resource):
     @jwt_required()
     @measure_execution_time
     def delete(self, id_proposal):
-        """Delete Work Item Quotation"""
+        """Delete Quotation"""
 
         updated_by = get_jwt().get("display_name")
 
@@ -145,5 +147,5 @@ class QuotationDetailResource(Resource):
 
         return success(
             data=None,
-            message="Penawaran berhasil dihapus"
+            message="Penawaran berhasil dihapus."
         )

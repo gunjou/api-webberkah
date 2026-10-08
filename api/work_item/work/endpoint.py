@@ -41,21 +41,32 @@ work_item_update_model = ns.model(
     }
 )
 
+progress_update_model = ns.model(
+    "WorkItemProgressUpdate",
+    {
+        "progress_percent": fields.Float(required=True, description="Persentase progress pekerjaan, 0 sampai 100", example=75),
+        "progress_date": fields.Date(required=False, description="Tanggal progress", example="2026-10-04"),
+        "notes": fields.String(required=False, description="Catatan progress", example="Pekerjaan instalasi sudah mencapai 75%."),
+    }
+)
+
 
 # ======================= #ANCHOR - FILTER PARSER ============================ #
 
 work_item_filter_parser = ns.parser()
+work_item_filter_parser.add_argument("stage", type=str, required=False, default="ACTIVE", choices=("ACTIVE", "CLOSED"), location="args", help="Filter berdasarkan status work item. ACTIVE untuk semua stage selain CLOSED, CLOSED untuk work item yang sudah ditutup.")
+work_item_filter_parser.add_argument(
+    "current_stage", type=str, required=False,
+    choices=(
+        "IDENTIFIED", "QUOTATION", "CONTRACT", "BA", "INVOICE", "PAYMENT", "CLOSED"
+    ),
+    location="args", help="Filter berdasarkan current stage work item."
+)
 work_item_filter_parser.add_argument("search", type=str, required=False, location="args", help="Search by work number or work name.")
 work_item_filter_parser.add_argument("work_type", type=str, required=False, choices=("TENDER", "MAINTENANCE"), location="args", help="Filter by work type.")
-work_item_filter_parser.add_argument("current_stage", type=str, required=False,
-    choices=(
-        "IDENTIFIED", "QUOTATION", "CONTRACT", "IN_PROGRESS", "COMPLETED", "BA", "INVOICE", "PAYMENT", "CLOSED"
-    ),
-    location="args", help="Filter by current stage."
-)
 work_item_filter_parser.add_argument("id_client", type=int, required=False, location="args", help="Filter by client ID.")
-work_item_filter_parser.add_argument("page", type=int, required=False, default=1, location="args", help="Page number.")
-work_item_filter_parser.add_argument("per_page", type=int, required=False, default=10, location="args", help="Number of records per page.")
+work_item_filter_parser.add_argument("page", type=int, required=False, location="args", help="Page number. Only used when stage=CLOSED.")
+work_item_filter_parser.add_argument("per_page", type=int, required=False, location="args", help="Number of records per page. Minimum 25 and only used when stage=CLOSED.")
 
 
 work_item_options_parser = ns.parser()
@@ -184,4 +195,47 @@ class WorkItemOptionsResource(Resource):
         return success(
             data=data,
             message="Opsi work item berhasil diambil"
+        )
+
+
+@ns.route("/<int:id_work_item>/progress")
+class WorkItemProgressResource(Resource):
+
+    @jwt_required()
+    @ns.expect(progress_update_model)
+    @measure_execution_time
+    def put(self, id_work_item):
+        """Update Progress Work Item"""
+
+        data = request.json or {}
+        updated_by = get_jwt().get("display_name")
+
+        result = update_work_progress_service(
+            id_work_item=id_work_item,
+            data=data,
+            updated_by=updated_by
+        )
+
+        return success(
+            data=result,
+            message="Progress pekerjaan berhasil diperbarui"
+        )
+
+
+@ns.route("/<int:id_work_item>/close")
+class WorkItemCloseResource(Resource):
+
+    @jwt_required()
+    @measure_execution_time
+    def post(self, id_work_item):
+        updated_by = get_jwt().get("display_name")
+
+        data = close_work_item_service(
+            id_work_item=id_work_item,
+            updated_by=updated_by
+        )
+
+        return success(
+            data=data,
+            message="Pekerjaan berhasil ditutup"
         )

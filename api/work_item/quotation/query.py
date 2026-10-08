@@ -84,48 +84,92 @@ def get_quotation_by_id(id_proposal):
 #                         #SECTION - QUOTATION                                 #
 # ============================================================================ #
 
-def get_quotation_list(search=None, status=None, id_work_item=None, page=1, per_page=10):
+def get_quotation_list(stage="ACTIVE", search=None, status=None, id_work_item=None, id_client=None, page=None, per_page=None):
 
-    conditions = ["wp.is_active = 1"]
+    conditions = [
+        "wp.is_active = 1",
+        "wi.is_active = 1"
+    ]
 
     params = {}
 
-    # ---------------------------------------------------------------------- #
-    # Search
-    # ---------------------------------------------------------------------- #
+    # =================================== Stage ================================== #
+
+    if stage == "ACTIVE":
+        conditions.append(
+            "wi.current_stage != 'CLOSED'"
+        )
+
+    elif stage == "CLOSED":
+        conditions.append(
+            "wi.current_stage = 'CLOSED'"
+        )
+
+    # ================================== Search ================================== #
 
     if search:
-        conditions.append("""wp.proposal_number ILIKE :search""")
+        conditions.append(
+            "wp.proposal_number ILIKE :search"
+        )
+
         params["search"] = f"%{search.strip()}%"
 
-    # ---------------------------------------------------------------------- #
-    # Status
-    # ---------------------------------------------------------------------- #
+    # ================================== Status ================================== #
 
     if status:
-        conditions.append("wp.status = :status")
+        conditions.append(
+            "wp.status = :status"
+        )
+
         params["status"] = status
 
-    # ---------------------------------------------------------------------- #
-    # Work Item
-    # ---------------------------------------------------------------------- #
+    # ================================= Work Item ================================ #
 
     if id_work_item:
-        conditions.append("wp.id_work_item = :id_work_item")
+        conditions.append(
+            "wp.id_work_item = :id_work_item"
+        )
+
         params["id_work_item"] = id_work_item
+
+    # ================================== Client ================================== #
+
+    if id_client:
+        conditions.append(
+            "wi.id_client = :id_client"
+        )
+
+        params["id_client"] = id_client
 
     where_clause = " AND ".join(conditions)
 
-    offset = (page - 1) * per_page
+    # ================================ Pagination ================================ #
 
-    params["limit"] = per_page
-    params["offset"] = offset
+    pagination_clause = ""
+
+    if (
+        stage == "CLOSED"
+        and page is not None
+        and per_page is not None
+    ):
+        offset = (page - 1) * per_page
+
+        params["limit"] = per_page
+        params["offset"] = offset
+
+        pagination_clause = """
+            LIMIT :limit
+            OFFSET :offset
+        """
+
+    # =================================== Query ================================== #
 
     sql = text(f"""
         SELECT
-            wp.id_proposal, wp.id_work_item, wi.work_number, wi.work_name, c.code AS client_code, c.name AS client_name, 
-            wi.id_client_pic, cp.name AS client_pic_name, wp.proposal_number, wp.proposal_date, wp.proposal_value, 
-            wp.valid_until, wp.status, wp.notes, wp.created_by, wp.created_at, wp.updated_by, wp.updated_at
+            wp.id_proposal, wp.id_work_item, wi.work_number, wi.work_name, wi.current_stage, wi.id_client, 
+            c.code AS client_code, c.name AS client_name, wi.id_client_pic, cp.name AS client_pic_name, 
+            wp.proposal_number, wp.proposal_date, wp.proposal_value, wp.valid_until, wp.status, wp.notes, 
+            wp.created_by, wp.created_at, wp.updated_by, wp.updated_at
         FROM work_proposals wp
         INNER JOIN work_items wi
             ON wi.id_work_item = wp.id_work_item
@@ -137,13 +181,16 @@ def get_quotation_list(search=None, status=None, id_work_item=None, page=1, per_
         ORDER BY
             wp.proposal_date DESC,
             wp.id_proposal DESC
-        LIMIT :limit
-        OFFSET :offset
+        {pagination_clause}
     """)
+
+    # =================================== Count ================================== #
 
     sql_count = text(f"""
         SELECT COUNT(*) AS total
         FROM work_proposals wp
+        INNER JOIN work_items wi
+            ON wi.id_work_item = wp.id_work_item
         WHERE {where_clause}
     """)
 
@@ -159,41 +206,54 @@ def get_quotation_list(search=None, status=None, id_work_item=None, page=1, per_
             params
         ).scalar()
 
-        return {
-            "items": result,
-            "pagination": {
-                "page": page,
-                "per_page": per_page,
-                "total": total,
-                "total_pages": (
-                    (total + per_page - 1) // per_page
-                    if total
-                    else 0
-                )
-            }
+    response = {
+        "items": [dict(row) for row in result],
+        "total": total
+    }
+
+    # ============================ Pagination Response =========================== #
+
+    if (
+        stage == "CLOSED"
+        and page is not None
+        and per_page is not None
+    ):
+        response["pagination"] = {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (
+                (total + per_page - 1) // per_page
+                if total
+                else 0
+            )
         }
+
+    return response
 
 
 def create_quotation(body: dict):
-
-    sql = text("""
-        INSERT INTO work_proposals (
-            id_work_item, proposal_number, proposal_date, proposal_value, valid_until, status, notes, 
-            is_active, created_by, created_at, updated_at
-        )
-        VALUES (
-            :id_work_item, :proposal_number, :proposal_date, :proposal_value, :valid_until, :status, :notes, 
-            1, :created_by, :now, :now
-        )
-        RETURNING id_proposal
-    """)
 
     now = get_wita()
 
     with engine.begin() as conn:
 
+        # ------------------------------------------------------------------ #
+        # Create Quotation
+        # ------------------------------------------------------------------ #
+
         result = conn.execute(
-            sql,
+            text("""
+                INSERT INTO work_proposals (
+                    id_work_item, proposal_number, proposal_date, proposal_value, valid_until, status, notes, 
+                    is_active, created_by, created_at, updated_at
+                )
+                VALUES (
+                    :id_work_item, :proposal_number, :proposal_date, :proposal_value, :valid_until, :status, :notes, 
+                    1, :created_by, :now, :now
+                )
+                RETURNING id_proposal
+            """),
             {
                 "id_work_item": body["id_work_item"],
                 "proposal_number": body["proposal_number"].strip(),
@@ -207,7 +267,69 @@ def create_quotation(body: dict):
             }
         )
 
-        return result.scalar()
+        id_proposal = result.scalar()
+
+        # ------------------------------------------------------------------ #
+        # Close Current Stage History
+        # ------------------------------------------------------------------ #
+
+        conn.execute(
+            text("""
+                UPDATE work_stage_histories
+                SET ended_at = :now
+                WHERE id_work_item = :id_work_item
+                  AND ended_at IS NULL
+                  AND is_active = 1
+            """),
+            {
+                "id_work_item": body["id_work_item"],
+                "now": now
+            }
+        )
+
+        # ------------------------------------------------------------------ #
+        # Update Work Item Stage
+        # ------------------------------------------------------------------ #
+
+        conn.execute(
+            text("""
+                UPDATE work_items
+                SET
+                    current_stage = 'QUOTATION',
+                    updated_by = :updated_by,
+                    updated_at = :now
+                WHERE id_work_item = :id_work_item
+                  AND is_active = 1
+            """),
+            {
+                "id_work_item": body["id_work_item"],
+                "updated_by": body["created_by"],
+                "now": now
+            }
+        )
+
+        # ------------------------------------------------------------------ #
+        # Create Stage History
+        # ------------------------------------------------------------------ #
+
+        conn.execute(
+            text("""
+                INSERT INTO work_stage_histories (
+                    id_work_item, stage, started_at, ended_at, notes, is_active, created_by, created_at
+                )
+                VALUES (
+                    :id_work_item, 'QUOTATION', :now, NULL, :notes, 1, :created_by, :now
+                )
+            """),
+            {
+                "id_work_item": body["id_work_item"],
+                "notes": "Stage berubah menjadi QUOTATION setelah penawaran dibuat.",
+                "created_by": body["created_by"],
+                "now": now
+            }
+        )
+
+        return id_proposal
 
 
 def get_quotation_detail(id_proposal):
@@ -284,25 +406,90 @@ def update_quotation(id_proposal, id_work_item, proposal_number, proposal_date, 
     return dict(result) if result else None
 
 
-def delete_quotation(id_proposal, updated_by):
-
-    query = text("""
-        UPDATE work_proposals
-        SET
-            is_active = 0,
-            updated_by = :updated_by,
-            updated_at = :updated_at
-        WHERE id_proposal = :id_proposal
-          AND is_active = 1
-    """)
+def delete_quotation(id_proposal: int, id_work_item: int, updated_by: str):
+    
+    now = get_wita()
 
     with engine.begin() as conn:
 
+        # ------------------------------------------------------------------ #
+        # Soft Delete Quotation
+        # ------------------------------------------------------------------ #
+
         conn.execute(
-            query,
+            text("""
+                UPDATE work_proposals
+                SET
+                    is_active = 0,
+                    updated_by = :updated_by,
+                    updated_at = :now
+                WHERE id_proposal = :id_proposal
+                  AND is_active = 1
+            """),
             {
                 "id_proposal": id_proposal,
                 "updated_by": updated_by,
-                "updated_at": get_wita()
+                "now": now
+            }
+        )
+
+        # ------------------------------------------------------------------ #
+        # Close Current QUOTATION Stage History
+        # ------------------------------------------------------------------ #
+
+        conn.execute(
+            text("""
+                UPDATE work_stage_histories
+                SET ended_at = :now
+                WHERE id_work_item = :id_work_item
+                  AND stage = 'QUOTATION'
+                  AND ended_at IS NULL
+                  AND is_active = 1
+            """),
+            {
+                "id_work_item": id_work_item,
+                "now": now
+            }
+        )
+
+        # ------------------------------------------------------------------ #
+        # Update Work Item Stage
+        # ------------------------------------------------------------------ #
+
+        conn.execute(
+            text("""
+                UPDATE work_items
+                SET
+                    current_stage = 'IDENTIFIED',
+                    updated_by = :updated_by,
+                    updated_at = :now
+                WHERE id_work_item = :id_work_item
+                  AND is_active = 1
+            """),
+            {
+                "id_work_item": id_work_item,
+                "updated_by": updated_by,
+                "now": now
+            }
+        )
+
+        # ------------------------------------------------------------------ #
+        # Create IDENTIFIED Stage History
+        # ------------------------------------------------------------------ #
+
+        conn.execute(
+            text("""
+                INSERT INTO work_stage_histories (
+                    id_work_item, stage, started_at, ended_at, notes, is_active, created_by, created_at
+                )
+                VALUES (
+                    :id_work_item, 'IDENTIFIED', :now, NULL, :notes, 1, :created_by, :now
+                )
+            """),
+            {
+                "id_work_item": id_work_item,
+                "notes": "Stage kembali menjadi IDENTIFIED setelah penawaran dihapus.",
+                "created_by": updated_by,
+                "now": now
             }
         )

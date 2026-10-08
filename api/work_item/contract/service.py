@@ -8,16 +8,40 @@ from .query import *
 
 def get_contract_list_service(filters):
 
-    page = filters.get("page", 1)
-    per_page = filters.get("per_page", 10)
+    stage = filters.get("stage", "ACTIVE")
 
-    if page < 1:
-        raise ValidationError("Page harus lebih besar dari 0")
+    page = filters.get("page")
+    per_page = filters.get("per_page")
 
-    if per_page < 1:
-        raise ValidationError("Per page harus lebih besar dari 0")
+    # =========================== Pagination Validation ========================== #
 
-    return get_contract_list(filters)
+    if page is not None and page < 1:
+        raise ValidationError("Page harus lebih besar atau sama dengan 1.")
+
+    if per_page is not None and per_page < 25:
+        raise ValidationError("Per page minimal 25.")
+
+    if per_page is not None and per_page > 100:
+        raise ValidationError("Per page maksimal 100.")
+
+    if (page is None) != (per_page is None):
+        raise ValidationError("Page dan per page harus diisi bersamaan.")
+
+    # ==================== Active tidak menggunakan pagination =================== #
+
+    if stage == "ACTIVE":
+        page = None
+        per_page = None
+
+    return get_contract_list(
+        stage=stage,
+        search=filters.get("search"),
+        status=filters.get("status"),
+        id_work_item=filters.get("id_work_item"),
+        id_client=filters.get("id_client"),
+        page=page,
+        per_page=per_page
+    )
 
 
 def create_contract_service(body, created_by):
@@ -37,15 +61,50 @@ def create_contract_service(body, created_by):
     if not contract_date:
         raise ValidationError("Tanggal kontrak wajib diisi")
 
+    # ---------------------------------------------------------------------- #
+    # Check Work Item
+    # ---------------------------------------------------------------------- #
+
     work_item = get_work_item_by_id(id_work_item)
 
     if not work_item:
         raise NotFoundError("Work Item tidak ditemukan")
 
+    # ---------------------------------------------------------------------- #
+    # Validate Stage
+    # ---------------------------------------------------------------------- #
+
+    current_stage = work_item["current_stage"]
+    work_type = work_item["work_type"]
+
+    if work_type == "TENDER":
+
+        if current_stage != "QUOTATION":
+            raise ValidationError(
+                "Kontrak untuk work type TENDER hanya dapat dibuat "
+                "ketika work item berada pada stage QUOTATION."
+            )
+
+    elif work_type == "MAINTENANCE":
+
+        if current_stage not in ("IDENTIFIED", "QUOTATION"):
+            raise ValidationError(
+                "Kontrak untuk work type MAINTENANCE hanya dapat dibuat "
+                "ketika work item berada pada stage IDENTIFIED atau QUOTATION."
+            )
+
+    # ---------------------------------------------------------------------- #
+    # Check Duplicate Contract Number
+    # ---------------------------------------------------------------------- #
+
     duplicate = get_contract_by_number(contract_number)
 
     if duplicate:
         raise ValidationError("Nomor kontrak sudah digunakan")
+
+    # ---------------------------------------------------------------------- #
+    # Validate Contract Date
+    # ---------------------------------------------------------------------- #
 
     start_date = body.get("start_date")
     end_date = body.get("end_date")
@@ -53,15 +112,41 @@ def create_contract_service(body, created_by):
     if start_date and end_date and end_date < start_date:
         raise ValidationError("Tanggal selesai kontrak tidak boleh lebih kecil dari tanggal mulai")
 
+    # ---------------------------------------------------------------------- #
+    # Validate Contract Value
+    # ---------------------------------------------------------------------- #
+
     contract_value = body.get("contract_value")
 
-    if contract_value is not None and contract_value < 0:
-        raise ValidationError("Nilai kontrak tidak boleh kurang dari 0")
+    if contract_value is not None:
+
+        try:
+            contract_value = float(contract_value)
+        except (TypeError, ValueError):
+            raise ValidationError("Nilai kontrak harus berupa angka")
+
+        if contract_value < 0:
+            raise ValidationError("Nilai kontrak tidak boleh kurang dari 0")
+
+    # ---------------------------------------------------------------------- #
+    # Validate VAT Rate
+    # ---------------------------------------------------------------------- #
 
     vat_rate = body.get("vat_rate")
 
-    if vat_rate is not None and (vat_rate < 0 or vat_rate > 100):
-        raise ValidationError("VAT rate harus berada antara 0 sampai 100")
+    if vat_rate is not None:
+
+        try:
+            vat_rate = float(vat_rate)
+        except (TypeError, ValueError):
+            raise ValidationError("VAT rate harus berupa angka")
+
+        if vat_rate < 0 or vat_rate > 100:
+            raise ValidationError("VAT rate harus berada antara 0 sampai 100")
+
+    # ---------------------------------------------------------------------- #
+    # Validate Status
+    # ---------------------------------------------------------------------- #
 
     status = body.get("status", "ACTIVE")
 
@@ -69,6 +154,10 @@ def create_contract_service(body, created_by):
 
     if status not in allowed_status:
         raise ValidationError("Status kontrak tidak valid")
+
+    # ---------------------------------------------------------------------- #
+    # Create Contract
+    # ---------------------------------------------------------------------- #
 
     return create_contract(
         id_work_item=id_work_item,
@@ -174,16 +263,31 @@ def update_contract_service(id_contract, body, updated_by):
 
 
 def delete_contract_service(id_contract, updated_by):
-
-    if not id_contract:
-        raise ValidationError("ID kontrak wajib diisi")
-
+    
     contract = get_contract_by_id(id_contract)
 
     if not contract:
-        raise NotFoundError("Kontrak tidak ditemukan")
+        raise NotFoundError("Kontrak tidak ditemukan.")
 
-    delete_contract(
+    if contract.get("is_active") != 1:
+        raise ValidationError("Kontrak sudah tidak aktif.")
+
+    id_work_item = contract.get("id_work_item")
+
+    work_item = get_work_item_by_id(id_work_item)
+
+    if not work_item:
+        raise NotFoundError("Work Item tidak ditemukan.")
+
+    current_stage = work_item.get("current_stage")
+
+    # Contract hanya boleh dihapus ketika Work Item masih berada
+    # pada stage CONTRACT.
+    if current_stage != "CONTRACT":
+        raise ValidationError("Kontrak hanya dapat dihapus ketika Work Item berada pada tahap CONTRACT.")
+
+    return delete_contract(
         id_contract=id_contract,
+        id_work_item=id_work_item,
         updated_by=updated_by
     )
