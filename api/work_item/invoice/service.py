@@ -1,5 +1,6 @@
 
 from api.shared.exceptions import ValidationError, NotFoundError
+from api.work_item.helper import upload_work_item_document
 from .query import *
 
 
@@ -38,19 +39,19 @@ def get_invoice_list_service(filters):
     )
 
 
-def create_invoice_service(data, created_by):
+def create_invoice_service(body, created_by, document=None):
 
-    id_work_item = data.get("id_work_item")
-    id_completion = data.get("id_completion")
-    invoice_number = data.get("invoice_number")
-    invoice_date = data.get("invoice_date")
-    invoice_value = data.get("invoice_value")
-    vat_rate = data.get("vat_rate")
-    due_date = data.get("due_date")
-    document_url = data.get("document_url")
-    notes = data.get("notes")
+    id_work_item = body.get("id_work_item")
+    id_completion = body.get("id_completion")
+    invoice_number = body.get("invoice_number")
+    invoice_date = body.get("invoice_date")
+    invoice_value = body.get("invoice_value")
+    vat_rate = body.get("vat_rate")
+    due_date = body.get("due_date")
+    notes = body.get("notes")
 
-    # VALIDATION
+    # ------------------------------ Validate Input ------------------------------ #
+
     if not id_work_item:
         raise ValidationError("Work Item wajib dipilih")
 
@@ -80,33 +81,51 @@ def create_invoice_service(data, created_by):
             "dari tanggal invoice"
         )
 
-    # VALIDATE WORK ITEM
+    # ------------------------------ Check Work Item ----------------------------- #
+
     work_item = get_work_item_by_id(id_work_item)
 
     if not work_item:
         raise NotFoundError("Work Item tidak ditemukan")
 
-    # Invoice hanya dapat dibuat ketika Work Item
-    # berada pada stage BA
-    if work_item.get("current_stage") != "BA":
-        raise ValidationError("Invoice hanya dapat dibuat ketika Work Item berada pada tahap BA")
+    # ------------------------------ Validate Stage ------------------------------ #
 
-    # VALIDATE COMPLETION / BA
+    if work_item.get("current_stage") != "BA":
+        raise ValidationError(
+            "Invoice hanya dapat dibuat ketika Work Item berada pada tahap BA"
+        )
+
+    # -------------------------- Validate Completion / BA ------------------------- #
+
     completion = get_completion_by_id(id_completion)
 
     if not completion:
         raise NotFoundError("BA tidak ditemukan")
 
     if completion["id_work_item"] != id_work_item:
-        raise ValidationError("BA tidak terkait dengan Work Item yang dipilih")
+        raise ValidationError(
+            "BA tidak terkait dengan Work Item yang dipilih"
+        )
 
-    # VALIDATE DUPLICATE INVOICE
+    # ----------------------- Check Duplicate Invoice Number ---------------------- #
+
     duplicate = get_invoice_by_number(invoice_number)
 
     if duplicate:
         raise ValidationError("Nomor invoice sudah digunakan")
 
-    # CREATE
+    # ---------------------------- Upload Document ------------------------------- #
+
+    document_url = None
+
+    if document:
+        document_url = upload_work_item_document(
+            document,
+            "invoice"
+        )
+
+    # ------------------------------ Create Invoice ------------------------------ #
+
     return create_invoice(
         id_work_item=id_work_item,
         id_completion=id_completion,
@@ -115,10 +134,8 @@ def create_invoice_service(data, created_by):
         invoice_value=invoice_value,
         vat_rate=vat_rate,
         due_date=due_date,
-        document_url=document_url.strip()
-        if document_url else None,
-        notes=notes.strip()
-        if notes else None,
+        document_url=document_url,
+        notes=notes.strip() if notes else None,
         created_by=created_by
     )
 
@@ -136,25 +153,28 @@ def get_invoice_detail_service(id_invoice):
     return invoice
 
 
-def update_invoice_service(id_invoice, data, updated_by):
+def update_invoice_service(id_invoice, body, updated_by, document=None):
 
     if not id_invoice:
         raise ValidationError("ID invoice wajib diisi")
+
+    # --------------------------------- Ambil Invoice ----------------------------- #
 
     invoice = get_invoice_by_id(id_invoice)
 
     if not invoice:
         raise NotFoundError("Invoice tidak ditemukan")
 
-    id_work_item = data.get("id_work_item")
-    id_completion = data.get("id_completion")
-    invoice_number = data.get("invoice_number")
-    invoice_date = data.get("invoice_date")
-    invoice_value = data.get("invoice_value")
-    vat_rate = data.get("vat_rate")
-    due_date = data.get("due_date")
-    document_url = data.get("document_url")
-    notes = data.get("notes")
+    id_work_item = body.get("id_work_item")
+    id_completion = body.get("id_completion")
+    invoice_number = body.get("invoice_number")
+    invoice_date = body.get("invoice_date")
+    invoice_value = body.get("invoice_value")
+    vat_rate = body.get("vat_rate")
+    due_date = body.get("due_date")
+    notes = body.get("notes")
+
+    # ------------------------------ Validasi Input ------------------------------ #
 
     if not id_work_item:
         raise ValidationError("Work Item wajib dipilih")
@@ -175,12 +195,19 @@ def update_invoice_service(id_invoice, data, updated_by):
         raise ValidationError("PPN harus berada di antara 0 sampai 100")
 
     if due_date and due_date < invoice_date:
-        raise ValidationError("Tanggal jatuh tempo tidak boleh lebih kecil dari tanggal invoice")
+        raise ValidationError(
+            "Tanggal jatuh tempo tidak boleh lebih kecil "
+            "dari tanggal invoice"
+        )
+
+    # ------------------------------ Check Work Item ----------------------------- #
 
     work_item = get_work_item_by_id(id_work_item)
 
     if not work_item:
         raise NotFoundError("Work Item tidak ditemukan")
+
+    # -------------------------- Validate Completion / BA ------------------------- #
 
     if id_completion:
 
@@ -192,6 +219,8 @@ def update_invoice_service(id_invoice, data, updated_by):
         if completion["id_work_item"] != id_work_item:
             raise ValidationError("BA tidak terkait dengan Work Item yang dipilih")
 
+    # ----------------------- Check Duplicate Invoice Number ---------------------- #
+
     duplicate = get_invoice_by_number(
         invoice_number=invoice_number.strip(),
         exclude_id=id_invoice
@@ -199,6 +228,18 @@ def update_invoice_service(id_invoice, data, updated_by):
 
     if duplicate:
         raise ValidationError("Nomor invoice sudah digunakan")
+
+    # ---------------------------- Upload Document ------------------------------- #
+
+    document_url = None
+
+    if document:
+        document_url = upload_work_item_document(
+            document,
+            "invoice"
+        )
+
+    # ------------------------------ Update Invoice ------------------------------ #
 
     update_invoice(
         id_invoice=id_invoice,
@@ -209,7 +250,7 @@ def update_invoice_service(id_invoice, data, updated_by):
         invoice_value=invoice_value,
         vat_rate=vat_rate,
         due_date=due_date,
-        document_url=document_url.strip() if document_url else None,
+        document_url=document_url,
         notes=notes.strip() if notes else None,
         updated_by=updated_by
     )

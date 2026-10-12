@@ -1,5 +1,6 @@
 from flask import request
 from flask_jwt_extended import jwt_required, get_jwt
+from werkzeug.datastructures import FileStorage
 from flask_restx import Resource, fields
 
 from api.shared.response import success
@@ -45,6 +46,26 @@ quotation_update_model = ns.model(
 
 # ======================= #ANCHOR - FILTER PARSER ============================ #
 
+quotation_create_parser = ns.parser()
+quotation_create_parser.add_argument("id_work_item", type=int, required=True, location="form", help="Work Item ID")
+quotation_create_parser.add_argument("proposal_number", type=str, required=True, location="form", help="Quotation Number")
+quotation_create_parser.add_argument("proposal_date", type=str, required=True, location="form", help="Quotation Date: YYYY-MM-DD")
+quotation_create_parser.add_argument("proposal_value", type=float, required=False, location="form", help="Quotation Value")
+quotation_create_parser.add_argument("valid_until", type=str, required=False, location="form", help="Quotation Valid Until: YYYY-MM-DD")
+quotation_create_parser.add_argument("status", type=str, required=False, location="form", help="Quotation Status: DRAFT / SUBMITTED / WON / LOST / EXPIRED / CANCELLED")
+quotation_create_parser.add_argument("notes", type=str, required=False, location="form", help="Quotation Notes")
+quotation_create_parser.add_argument("document", type=FileStorage, required=False, location="files", help="Quotation Document")
+
+quotation_update_parser = ns.parser()
+quotation_update_parser.add_argument("id_work_item", type=int, required=True, location="form", help="Work Item ID")
+quotation_update_parser.add_argument("proposal_number", type=str, required=True, location="form", help="Quotation Number")
+quotation_update_parser.add_argument("proposal_date", type=str, required=True, location="form", help="Quotation Date: YYYY-MM-DD")
+quotation_update_parser.add_argument("proposal_value", type=float, required=False, location="form", help="Quotation Value")
+quotation_update_parser.add_argument("valid_until", type=str, required=False, location="form", help="Quotation Valid Until: YYYY-MM-DD")
+quotation_update_parser.add_argument("status", type=str, required=False, location="form", help="Quotation Status: DRAFT / SUBMITTED / WON / LOST / EXPIRED / CANCELLED")
+quotation_update_parser.add_argument("notes", type=str, required=False, location="form", help="Quotation Notes")
+quotation_update_parser.add_argument("document", type=FileStorage, required=False, location="files", help="Quotation Document")
+
 quotation_filter_parser = ns.parser()
 quotation_filter_parser.add_argument("stage", type=str, required=False, default="ACTIVE", choices=("ACTIVE", "CLOSED"), location="args", help="Filter berdasarkan status quotation. ACTIVE untuk quotation aktif, CLOSED untuk quotation yang sudah ditutup/dihapus.")
 quotation_filter_parser.add_argument("status", type=str, required=False, choices=("DRAFT", "SUBMITTED", "WON", "LOST", "EXPIRED", "CANCELLED"), location="args", help="Filter berdasarkan quotation status.")
@@ -76,17 +97,33 @@ class QuotationListResource(Resource):
             message="Data penawaran berhasil diambil."
         )
 
+
     @jwt_required()
-    @ns.expect(quotation_create_model)
+    @ns.expect(quotation_create_parser)
     @measure_execution_time
     def post(self):
         """Create Quotation"""
 
-        body = request.get_json() or {}
+        args = quotation_create_parser.parse_args()
 
-        body["created_by"] = get_jwt().get("display_name")
+        body = {
+            "id_work_item": args.get("id_work_item"),
+            "proposal_number": args.get("proposal_number"),
+            "proposal_date": args.get("proposal_date"),
+            "proposal_value": args.get("proposal_value"),
+            "valid_until": args.get("valid_until"),
+            "status": args.get("status"),
+            "notes": args.get("notes"),
+            "created_by": get_jwt().get("display_name"),
+        }
 
-        id_proposal = create_quotation_service(body)
+        document = args.get("document")
+
+        # Validasi bisnis + upload + create
+        id_proposal = create_quotation_service(
+            body,
+            document=document,
+        )
 
         return success(
             data={
@@ -113,18 +150,32 @@ class QuotationDetailResource(Resource):
     
     
     @jwt_required()
-    @ns.expect(quotation_update_model)
+    @ns.expect(quotation_update_parser)
     @measure_execution_time
     def put(self, id_proposal):
         """Update Work Item Quotation"""
 
-        body = request.json or {}
+        args = quotation_update_parser.parse_args()
+
+        body = {
+            "id_work_item": args.get("id_work_item"),
+            "proposal_number": args.get("proposal_number"),
+            "proposal_date": args.get("proposal_date"),
+            "proposal_value": args.get("proposal_value"),
+            "valid_until": args.get("valid_until"),
+            "status": args.get("status"),
+            "notes": args.get("notes"),
+        }
+
+        document = args.get("document")
+
         updated_by = get_jwt().get("display_name")
 
         data = update_quotation_service(
             id_proposal=id_proposal,
             body=body,
-            updated_by=updated_by
+            updated_by=updated_by,
+            document=document,
         )
 
         return success(

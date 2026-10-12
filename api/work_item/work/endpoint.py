@@ -1,6 +1,7 @@
 from flask import request
 from flask_jwt_extended import jwt_required, get_jwt
 from flask_restx import Resource, fields
+from werkzeug.datastructures import FileStorage
 
 from api.shared.response import success
 from api.shared.exceptions import ValidationError
@@ -23,6 +24,7 @@ work_item_create_model = ns.model(
         "progress_percent": fields.Float(required=False, description="Initial Progress Percentage"),
         "start_date": fields.Date(required=False, description="Work Start Date"),
         "target_end_date": fields.Date(required=False, description="Target End Date"),
+        "document_url": fields.String(required=False, description="Document URL"),
         "notes": fields.String(required=False, description="Work Notes")
     }
 )
@@ -52,6 +54,31 @@ progress_update_model = ns.model(
 
 
 # ======================= #ANCHOR - FILTER PARSER ============================ #
+
+work_item_create_parser = ns.parser()
+work_item_create_parser.add_argument("work_number", type=str, required=True, location="form")
+work_item_create_parser.add_argument("work_name", type=str, required=True, location="form")
+work_item_create_parser.add_argument("work_type", type=str, required=True, location="form")
+work_item_create_parser.add_argument("id_client", type=int, required=True, location="form")
+work_item_create_parser.add_argument("id_client_pic", type=int, required=False, location="form")
+work_item_create_parser.add_argument("internal_pic_name", type=str, required=False, location="form")
+work_item_create_parser.add_argument("progress_percent", type=float, required=False, location="form")
+work_item_create_parser.add_argument("start_date", type=str, required=False, location="form")
+work_item_create_parser.add_argument("target_end_date", type=str, required=False, location="form")
+work_item_create_parser.add_argument("notes", type=str, required=False, location="form")
+work_item_create_parser.add_argument("document", type=FileStorage, required=False, location="files")
+
+work_item_update_parser = ns.parser()
+work_item_update_parser.add_argument("work_number", type=str, required=True, location="form")
+work_item_update_parser.add_argument("work_name", type=str, required=True, location="form")
+work_item_update_parser.add_argument("work_type", type=str, required=True, location="form")
+work_item_update_parser.add_argument("id_client", type=int, required=True, location="form")
+work_item_update_parser.add_argument("id_client_pic", type=int, required=False, location="form")
+work_item_update_parser.add_argument("internal_pic_name", type=str, required=False, location="form")
+work_item_update_parser.add_argument("start_date", type=str, required=False, location="form")
+work_item_update_parser.add_argument("target_end_date", type=str, required=False, location="form")
+work_item_update_parser.add_argument("notes", type=str, required=False, location="form")
+work_item_update_parser.add_argument("document", type=FileStorage, required=False, location="files")
 
 work_item_filter_parser = ns.parser()
 work_item_filter_parser.add_argument("stage", type=str, required=False, default="ACTIVE", choices=("ACTIVE", "CLOSED"), location="args", help="Filter berdasarkan status work item. ACTIVE untuk semua stage selain CLOSED, CLOSED untuk work item yang sudah ditutup.")
@@ -102,18 +129,38 @@ class WorkItemListResource(Resource):
         )
 
     @jwt_required()
-    @ns.expect(work_item_create_model)
+    @ns.expect(work_item_create_parser)
     @measure_execution_time
     def post(self):
         """Create Work Item"""
 
-        body = request.get_json() or {}
-        body["created_by"] = get_jwt().get("display_name")
+        args = work_item_create_parser.parse_args()
 
-        id_work_item = create_work_item_service(body)
+        body = {
+            "work_number": args.get("work_number"),
+            "work_name": args.get("work_name"),
+            "work_type": args.get("work_type"),
+            "id_client": args.get("id_client"),
+            "id_client_pic": args.get("id_client_pic"),
+            "internal_pic_name": args.get("internal_pic_name"),
+            "progress_percent": args.get("progress_percent"),
+            "start_date": args.get("start_date"),
+            "target_end_date": args.get("target_end_date"),
+            "notes": args.get("notes"),
+            "created_by": get_jwt().get("display_name")
+        }
+
+        document = args.get("document")
+
+        id_work_item = create_work_item_service(
+            body=body,
+            document=document
+        )
 
         return success(
-            data={"id_work_item": id_work_item},
+            data={
+                "id_work_item": id_work_item
+            },
             message="Work item berhasil ditambahkan."
         )
 
@@ -137,18 +184,32 @@ class WorkItemDetailResource(Resource):
     
     
     @jwt_required()
-    @ns.expect(work_item_update_model)
+    @ns.expect(work_item_update_parser)
     @measure_execution_time
     def put(self, id_work_item):
         """Update Work Item"""
 
-        body = request.get_json() or {}
+        args = work_item_update_parser.parse_args()
 
-        body["updated_by"] = get_jwt().get("display_name")
+        body = {
+            "work_number": args.get("work_number"),
+            "work_name": args.get("work_name"),
+            "work_type": args.get("work_type"),
+            "id_client": args.get("id_client"),
+            "id_client_pic": args.get("id_client_pic"),
+            "internal_pic_name": args.get("internal_pic_name"),
+            "start_date": args.get("start_date"),
+            "target_end_date": args.get("target_end_date"),
+            "notes": args.get("notes"),
+            "updated_by": get_jwt().get("display_name")
+        }
+
+        document = args.get("document")
 
         update_work_item_service(
-            id_work_item,
-            body
+            id_work_item=id_work_item,
+            body=body,
+            document=document
         )
 
         return success(

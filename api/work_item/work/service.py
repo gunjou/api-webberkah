@@ -1,4 +1,5 @@
 from api.shared.exceptions import ValidationError, NotFoundError
+from api.work_item.helper import upload_work_item_document
 from .query import *
 
 
@@ -46,7 +47,7 @@ def get_work_item_list_service(filters: dict):
     )
 
 
-def create_work_item_service(body: dict):
+def create_work_item_service(body: dict, document=None):
 
     if not body.get("work_number"):
         raise ValidationError("Work number wajib diisi.")
@@ -63,52 +64,69 @@ def create_work_item_service(body: dict):
     if not body.get("id_client"):
         raise ValidationError("Client wajib dipilih.")
 
+    # ============================= PROGRESS ============================= #
+
     if body.get("progress_percent") is not None:
         try:
             progress_percent = float(body["progress_percent"])
+
         except (TypeError, ValueError):
             raise ValidationError("Progress harus berupa angka.")
 
         if progress_percent < 0 or progress_percent > 100:
             raise ValidationError("Progress harus berada antara 0 sampai 100.")
 
+    # ============================= CLIENT PIC ============================= #
+
     if body.get("id_client_pic"):
-        client_pic = get_client_pic_by_id(body["id_client_pic"])
+        client_pic = get_client_pic_by_id(int(body["id_client_pic"]))
 
         if not client_pic:
             raise NotFoundError("Client PIC tidak ditemukan.")
 
-        if client_pic["id_client"] != body["id_client"]:
+        if client_pic["id_client"] != int(body["id_client"]):
             raise ValidationError("Client PIC tidak sesuai dengan client.")
 
-    client = get_client_by_id(body["id_client"])
+    # ============================= CLIENT ============================= #
+
+    client = get_client_by_id(int(body["id_client"]))
 
     if not client:
         raise NotFoundError("Client tidak ditemukan.")
 
-    duplicate = get_work_item_by_number(body["work_number"])
+    # ============================= DUPLICATE ============================= #
+
+    duplicate = get_work_item_by_number(body["work_number"].strip())
 
     if duplicate:
         raise ValidationError("Work number sudah digunakan.")
+
+    # ============================= DOCUMENT ============================= #
+
+    document_url = None
+
+    if document:
+        document_url = upload_work_item_document(
+            document=document,
+            category="pekerjaan"
+        )
+
+    body["document_url"] = document_url
 
     return create_work_item(body)
 
 
 def get_work_item_detail_service(id_work_item):
 
-    work_item = get_work_item_detail(
-        id_work_item
-    )
+    work_item = get_work_item_detail(id_work_item)
 
     if not work_item:
-        raise NotFoundError(
-            "Work item tidak ditemukan."
-        )
+        raise NotFoundError("Work item tidak ditemukan.")
 
     return work_item
 
 
-def update_work_item_service(id_work_item, body):
+def update_work_item_service(id_work_item, body, document=None):
 
     current_work = get_work_item_by_id(id_work_item)
 
@@ -124,30 +142,22 @@ def update_work_item_service(id_work_item, body):
     if not body.get("work_type"):
         raise ValidationError("Work type wajib diisi.")
 
-    if body["work_type"] not in (
-        "TENDER",
-        "MAINTENANCE"
-    ):
+    if body["work_type"] not in ("TENDER", "MAINTENANCE"):
         raise ValidationError("Work type hanya boleh TENDER atau MAINTENANCE.")
 
     if not body.get("id_client"):
         raise ValidationError("Client wajib dipilih.")
 
-    # ---------------------------------------------------------------------- #
-    # Check client
-    # ---------------------------------------------------------------------- #
+    # =============================== Check client =============================== #
 
     client = get_client_by_id(body["id_client"])
 
     if not client:
         raise NotFoundError("Client tidak ditemukan.")
 
-    # ---------------------------------------------------------------------- #
-    # Check client PIC
-    # ---------------------------------------------------------------------- #
+    # =============================== Check client PIC =============================== #
 
     if body.get("id_client_pic"):
-
         client_pic = get_client_pic_by_id(body["id_client_pic"])
 
         if not client_pic:
@@ -156,32 +166,41 @@ def update_work_item_service(id_work_item, body):
         if client_pic["id_client"] != body["id_client"]:
             raise ValidationError("Client PIC tidak sesuai dengan client.")
 
-    # ---------------------------------------------------------------------- #
-    # Check duplicate work number
-    # ---------------------------------------------------------------------- #
+    # =============================== Check duplicate work number =============================== #
 
     duplicate = get_work_item_by_number(body["work_number"])
 
     if (duplicate and duplicate["id_work_item"] != id_work_item):
         raise ValidationError("Work number sudah digunakan.")
 
-    # ---------------------------------------------------------------------- #
-    # Update
-    # ---------------------------------------------------------------------- #
+    # ================== Upload document jika ada document baru ================== #
 
-    update_work_item(id_work_item, body)
+    if document:
+        document_url = upload_work_item_document(
+            document=document,
+            category="pekerjaan"
+        )
+
+        body["document_url"] = document_url
+
+    else:
+        # Pertahankan document lama
+        body["document_url"] = current_work.get("document_url")
+
+    # ================================== Update ================================== #
+
+    update_work_item(
+        id_work_item=id_work_item,
+        body=body
+    )
 
 
 def delete_work_item_service(id_work_item, updated_by):
 
-    work_item = get_work_item_by_id(
-        id_work_item
-    )
+    work_item = get_work_item_by_id(id_work_item)
 
     if not work_item:
-        raise NotFoundError(
-            "Work item tidak ditemukan."
-        )
+        raise NotFoundError("Work item tidak ditemukan.")
 
     delete_work_item(
         id_work_item,
@@ -191,9 +210,7 @@ def delete_work_item_service(id_work_item, updated_by):
 
 def get_work_item_options_service(context=None):
 
-    return get_work_item_options(
-        context=context
-    )
+    return get_work_item_options(context=context)
 
 
 def update_work_progress_service(id_work_item, data, updated_by):
@@ -229,6 +246,7 @@ def update_work_progress_service(id_work_item, data, updated_by):
 
 
 def close_work_item_service(id_work_item, updated_by):
+
     return close_work_item(
         id_work_item=id_work_item,
         updated_by=updated_by

@@ -1,9 +1,10 @@
 from api.shared.exceptions import ValidationError, NotFoundError
+from api.work_item.helper import upload_work_item_document
 
 from .query import *
 
 
-def create_payment_service(payload, created_by):
+def create_payment_service(payload, created_by, document=None):
 
     id_invoice = payload.get("id_invoice")
     payment_date = payload.get("payment_date")
@@ -21,11 +22,21 @@ def create_payment_service(payload, created_by):
     if amount <= 0:
         raise ValidationError("Nominal pembayaran harus lebih besar dari 0")
 
+    # ======================== UPLOAD DOCUMENT ======================== #
+
+    document_url = None
+
+    if document:
+        document_url = upload_work_item_document(
+            document=document,
+            category="payment"
+        )
+
     return create_payment(
         id_invoice=id_invoice,
         payment_date=payment_date,
         amount=amount,
-        document_url=payload.get("document_url"),
+        document_url=document_url,
         notes=payload.get("notes"),
         created_by=created_by
     )

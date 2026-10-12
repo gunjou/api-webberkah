@@ -12,7 +12,7 @@ def get_work_item_by_id(id_work_item):
     sql = text("""
         SELECT
             id_work_item, work_number, work_name, work_type, id_client, id_client_pic, internal_pic_name, 
-            current_stage, progress_percent, start_date, target_end_date, completion_date, notes, 
+            current_stage, progress_percent, start_date, target_end_date, completion_date, document_url, notes, 
             is_active, created_by, created_at, updated_by, updated_at
         FROM work_items
         WHERE
@@ -65,7 +65,7 @@ def get_contract_by_id(id_contract):
     query = text("""
         SELECT
             id_contract, id_work_item, contract_number, contract_date, start_date, end_date, contract_value, vat_rate, 
-            status, notes, is_active, created_by, created_at, updated_by, updated_at
+            status, document_url, notes, is_active, created_by, created_at, updated_by, updated_at
         FROM work_contracts
         WHERE id_contract = :id_contract
           AND is_active = 1
@@ -189,7 +189,7 @@ def get_contract_list(stage="ACTIVE", search=None, status=None, id_work_item=Non
             wc.id_contract, wc.id_work_item, wi.work_number, wi.work_name, wi.work_type, wi.current_stage AS stage, 
             wi.id_client, c.code AS client_code, c.name AS client_name, wi.id_client_pic, cp.name AS client_pic_name, 
             wc.contract_number, wc.contract_date, wc.start_date, wc.end_date, wc.contract_value, wc.vat_rate, 
-            wc.status, wc.notes, wc.created_by, wc.created_at, wc.updated_by, wc.updated_at
+            wc.status, wc.document_url, wc.notes, wc.created_by, wc.created_at, wc.updated_by, wc.updated_at
         FROM work_contracts wc
         INNER JOIN work_items wi
             ON wi.id_work_item = wc.id_work_item
@@ -242,25 +242,23 @@ def get_contract_list(stage="ACTIVE", search=None, status=None, id_work_item=Non
     return response
 
 
-def create_contract(id_work_item, contract_number, contract_date, start_date, end_date, contract_value, vat_rate, status, notes, created_by):
+def create_contract(id_work_item, contract_number, contract_date, start_date, end_date, contract_value, vat_rate, status, document_url, notes, created_by):
 
     now = get_wita()
 
     with engine.begin() as conn:
 
-        # ------------------------------------------------------------------ #
-        # Create Contract
-        # ------------------------------------------------------------------ #
+        # ------------------------------ Create Contract ----------------------------- #
 
         result = conn.execute(
             text("""
                 INSERT INTO work_contracts (
                     id_work_item, contract_number, contract_date, start_date, end_date, contract_value, vat_rate, 
-                    status, notes, is_active, created_by, created_at, updated_at
+                    status, document_url, notes, is_active, created_by, created_at, updated_at
                 )
                 VALUES (
                     :id_work_item, :contract_number, :contract_date, :start_date, :end_date, :contract_value, :vat_rate, 
-                    :status, :notes, 1, :created_by, :now, :now
+                    :status, :document_url, :notes, 1, :created_by, :now, :now
                 )
                 RETURNING id_contract
             """),
@@ -273,6 +271,7 @@ def create_contract(id_work_item, contract_number, contract_date, start_date, en
                 "contract_value": contract_value,
                 "vat_rate": vat_rate,
                 "status": status,
+                "document_url": document_url,
                 "notes": notes,
                 "created_by": created_by,
                 "now": now
@@ -281,9 +280,7 @@ def create_contract(id_work_item, contract_number, contract_date, start_date, en
 
         id_contract = result.scalar()
 
-        # ------------------------------------------------------------------ #
-        # Close Current Stage History
-        # ------------------------------------------------------------------ #
+        # ------------------------ Close Current Stage History ----------------------- #
 
         conn.execute(
             text("""
@@ -299,9 +296,7 @@ def create_contract(id_work_item, contract_number, contract_date, start_date, en
             }
         )
 
-        # ------------------------------------------------------------------ #
-        # Update Work Item Stage
-        # ------------------------------------------------------------------ #
+        # -------------------------- Update Work Item Stage -------------------------- #
 
         conn.execute(
             text("""
@@ -320,9 +315,7 @@ def create_contract(id_work_item, contract_number, contract_date, start_date, en
             }
         )
 
-        # ------------------------------------------------------------------ #
-        # Create Stage History
-        # ------------------------------------------------------------------ #
+        # --------------------------- Create Stage History --------------------------- #
 
         conn.execute(
             text("""
@@ -354,7 +347,7 @@ def get_contract_detail(id_contract):
             wi.progress_percent, wi.id_client, c.code AS client_code, c.name AS client_name, wi.id_client_pic, 
             cp.name AS client_pic_name, cp.position AS client_pic_position, cp.phone AS client_pic_phone, 
             cp.email AS client_pic_email, wc.contract_number, wc.contract_date, wc.start_date, wc.end_date, 
-            wc.contract_value, wc.vat_rate, wc.status, wc.notes, 
+            wc.contract_value, wc.vat_rate, wc.status, wc.document_url, wc.notes, 
             wc.is_active, wc.created_by, wc.created_at, wc.updated_by, wc.updated_at
         FROM work_contracts wc
         INNER JOIN work_items wi
@@ -379,7 +372,7 @@ def get_contract_detail(id_contract):
     return dict(result) if result else None
 
 
-def update_contract(id_contract, id_work_item, contract_number, contract_date, start_date, end_date, contract_value, vat_rate, status, notes, updated_by):
+def update_contract(id_contract, id_work_item, contract_number, contract_date, start_date, end_date, contract_value, vat_rate, status, document_url, notes, updated_by):
 
     query = text("""
         UPDATE work_contracts
@@ -392,6 +385,7 @@ def update_contract(id_contract, id_work_item, contract_number, contract_date, s
             contract_value = :contract_value,
             vat_rate = :vat_rate,
             status = :status,
+            document_url = COALESCE(:document_url, document_url),
             notes = :notes,
             updated_by = :updated_by,
             updated_at = :updated_at
@@ -399,7 +393,7 @@ def update_contract(id_contract, id_work_item, contract_number, contract_date, s
           AND is_active = 1
         RETURNING
             id_contract, id_work_item, contract_number, contract_date, start_date, end_date, contract_value, vat_rate, 
-            status, notes, updated_by, updated_at
+            status, document_url, notes, updated_by, updated_at
     """)
 
     with engine.begin() as conn:
@@ -416,6 +410,7 @@ def update_contract(id_contract, id_work_item, contract_number, contract_date, s
                 "contract_value": contract_value,
                 "vat_rate": vat_rate,
                 "status": status,
+                "document_url": document_url,
                 "notes": notes,
                 "updated_by": updated_by,
                 "updated_at": get_wita()
@@ -430,7 +425,7 @@ def delete_contract(id_contract, id_work_item, updated_by):
 
     with engine.begin() as conn:
 
-        # 1. Soft delete contract
+        # -------------------------- 1. Soft delete contract ------------------------- #
         delete_query = text("""
             UPDATE work_contracts
             SET
@@ -454,7 +449,7 @@ def delete_contract(id_contract, id_work_item, updated_by):
         if result.rowcount == 0:
             raise NotFoundError("Kontrak tidak ditemukan atau sudah tidak aktif.")
 
-        # 2. Tentukan stage tujuan setelah contract dihapus
+        # ------------- 2. Tentukan stage tujuan setelah contract dihapus ------------ #
         stage_query = text("""
             SELECT
                 CASE
@@ -478,7 +473,7 @@ def delete_contract(id_contract, id_work_item, updated_by):
 
         previous_stage = stage_result["previous_stage"]
 
-        # 3. Tutup history CONTRACT yang sedang aktif
+        # ---------------- 3. Tutup history CONTRACT yang sedang aktif --------------- #
         close_history_query = text("""
             UPDATE work_stage_histories
             SET
@@ -498,7 +493,7 @@ def delete_contract(id_contract, id_work_item, updated_by):
             }
         )
 
-        # 4. Rollback current stage Work Item
+        # -------------------- 4. Rollback current stage Work Item ------------------- #
         update_work_query = text("""
             UPDATE work_items
             SET
@@ -520,7 +515,7 @@ def delete_contract(id_contract, id_work_item, updated_by):
             }
         )
 
-        # 5. Buat history stage baru
+        # ------------------------ 5. Buat history stage baru ------------------------ #
         insert_history_query = text("""
             INSERT INTO work_stage_histories (
                 id_work_item, stage, started_at, ended_at, notes, is_active, created_by, created_at

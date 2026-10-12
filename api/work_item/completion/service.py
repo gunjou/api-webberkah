@@ -1,4 +1,5 @@
 from api.shared.exceptions import ValidationError, NotFoundError
+from api.work_item.helper import upload_work_item_document
 from .query import *
 
 
@@ -43,7 +44,7 @@ def get_completion_list_service(filters):
     )
 
 
-def create_completion_service(body, created_by):
+def create_completion_service(body, created_by, document=None):
 
     id_work_item = body.get("id_work_item")
 
@@ -55,49 +56,68 @@ def create_completion_service(body, created_by):
     if not ba_number or not ba_number.strip():
         raise ValidationError("Nomor BA wajib diisi")
 
-    ba_date = body.get("ba_date")
-
-    if not ba_date:
-        raise ValidationError("Tanggal BA wajib diisi")
-
     work_item = get_work_item_by_id(id_work_item)
 
     if not work_item:
         raise NotFoundError("Work Item tidak ditemukan")
 
-    # BA hanya dapat dibuat ketika Work Item berada pada stage CONTRACT
+    # -----------------------------------------------------------------------------
+    # BA hanya dapat dibuat ketika Work Item berada pada
+    # stage CONTRACT
+    # -----------------------------------------------------------------------------
+
     if work_item.get("current_stage") != "CONTRACT":
         raise ValidationError("BA hanya dapat dibuat ketika Work Item berada pada tahap CONTRACT")
 
-    # BA hanya dapat dibuat jika pekerjaan sudah 100%
+    # -------------- BA hanya dapat dibuat jika progress sudah 100% -------------- #
+
     progress_percent = work_item.get("progress_percent") or 0
 
-    if progress_percent != 100:
+    if float(progress_percent) != 100:
         raise ValidationError("BA hanya dapat dibuat jika progress pekerjaan sudah mencapai 100%")
 
-    # Hanya BA aktif yang diperhitungkan
+    # ---------------- Hanya satu BA aktif untuk setiap Work Item ---------------- #
+
     existing_completion = get_completion_by_work_item(id_work_item)
 
     if existing_completion:
         raise ValidationError("Work Item sudah memiliki BA aktif")
 
-    # Hanya nomor BA aktif yang tidak boleh duplikat
-    duplicate = get_completion_by_number(ba_number)
+    # ----------------------- Nomor BA tidak boleh duplikat ---------------------- #
+
+    duplicate = get_completion_by_number(ba_number.strip())
 
     if duplicate:
         raise ValidationError("Nomor BA sudah digunakan")
 
-    completion_date = body.get("completion_date")
+    # -----------------------------------------------------------------------------
+    # BA Date
+    #
+    # Jika tidak dikirim, gunakan tanggal hari ini.
+    # -----------------------------------------------------------------------------
 
-    if completion_date and completion_date < ba_date:
-        raise ValidationError("Tanggal penyelesaian tidak boleh lebih kecil dari tanggal BA")
+    ba_date = body.get("ba_date")
+
+    if not ba_date:
+        ba_date = get_wita().date()
+
+    # -------------------------- Upload document ke CDN -------------------------- #
+
+    document_url = None
+
+    if document:
+        document_url = upload_work_item_document(
+            document,
+            "ba"
+        )
+
+    # --------------------------------- Create BA -------------------------------- #
 
     return create_completion(
         id_work_item=id_work_item,
         ba_number=ba_number.strip(),
         ba_date=ba_date,
-        completion_date=completion_date,
-        document_url=body.get("document_url"),
+        document_url=document_url,
         notes=body.get("notes"),
         created_by=created_by
     )
@@ -116,10 +136,12 @@ def get_completion_detail_service(id_completion):
     return completion
 
 
-def update_completion_service(id_completion, data, updated_by):
+def update_completion_service(id_completion, data, updated_by, document=None):
 
     if not id_completion:
         raise ValidationError("ID BA wajib diisi")
+
+    # --------------------------------- Ambil BA --------------------------------- #
 
     completion = get_completion_by_id(id_completion)
 
@@ -129,9 +151,9 @@ def update_completion_service(id_completion, data, updated_by):
     id_work_item = data.get("id_work_item")
     ba_number = data.get("ba_number")
     ba_date = data.get("ba_date")
-    completion_date = data.get("completion_date")
-    document_url = data.get("document_url")
     notes = data.get("notes")
+
+    # ------------------------------ Validasi input ------------------------------ #
 
     if not id_work_item:
         raise ValidationError("Work Item wajib dipilih")
@@ -142,42 +164,52 @@ def update_completion_service(id_completion, data, updated_by):
     if not ba_date:
         raise ValidationError("Tanggal BA wajib diisi")
 
+    # ---------------------------- Validasi Work Item ---------------------------- #
+
     work_item = get_work_item_by_id(id_work_item)
 
     if not work_item:
         raise NotFoundError("Work Item tidak ditemukan")
 
-    duplicate = get_completion_by_number(
-        ba_number=ba_number.strip(),
-        exclude_id=id_completion
-    )
+    # -----------------------------------------------------------------------------
+    # BA hanya dapat diedit ketika Work Item berada pada stage BA
+    # -----------------------------------------------------------------------------
 
-    if duplicate:
-        raise ValidationError("Nomor BA sudah digunakan")
+    if work_item.get("current_stage") != "BA":
+        raise ValidationError(
+            "BA hanya dapat diperbarui ketika Work Item berada pada tahap BA"
+        )
 
-    existing_completion = get_completion_by_work_item(
-        id_work_item=id_work_item,
-        exclude_id=id_completion
-    )
+    # ------------------------- Progress harus tetap 100% ------------------------ #
 
-    if existing_completion:
-        raise ValidationError("Work Item sudah memiliki BA aktif")
+    progress_percent = work_item.get("progress_percent") or 0
 
-    if completion_date and completion_date < ba_date:
-        raise ValidationError("Tanggal penyelesaian tidak boleh lebih kecil dari tanggal BA")
+    if float(progress_percent) != 100:
+        raise ValidationError(
+            "BA hanya dapat diperbarui jika progress pekerjaan sudah mencapai 100%"
+        )
+
+    # ----------------------- Upload document baru jika ada ---------------------- #
+
+    document_url = None
+
+    if document:
+        document_url = upload_work_item_document(
+            document,
+            "ba"
+        )
+
+    # --------------------------------- Update BA -------------------------------- #
 
     return update_completion(
         id_completion=id_completion,
         id_work_item=id_work_item,
         ba_number=ba_number.strip(),
         ba_date=ba_date,
-        completion_date=completion_date,
-        document_url=document_url.strip() if document_url else None,
+        document_url=document_url,
         notes=notes.strip() if notes else None,
         updated_by=updated_by
     )
-
-    # return get_completion_detail(id_completion)
 
 
 def delete_completion_service(id_completion, updated_by):

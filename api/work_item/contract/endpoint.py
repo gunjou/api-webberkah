@@ -1,5 +1,6 @@
 from flask import request
 from flask_jwt_extended import jwt_required, get_jwt
+from werkzeug.datastructures import FileStorage
 from flask_restx import Resource, fields
 
 from api.shared.response import success
@@ -45,6 +46,30 @@ contract_update_model = ns.model(
 
 # ======================= #ANCHOR - FILTER PARSER ============================ #
 
+contract_create_parser = ns.parser()
+contract_create_parser.add_argument("id_work_item", type=int, required=True, location="form", help="Work Item ID")
+contract_create_parser.add_argument("contract_number", type=str, required=True, location="form", help="Contract Number")
+contract_create_parser.add_argument("contract_date", type=str, required=True, location="form", help="Contract Date: YYYY-MM-DD")
+contract_create_parser.add_argument("start_date", type=str, required=False, location="form", help="Contract Start Date: YYYY-MM-DD")
+contract_create_parser.add_argument("end_date", type=str, required=False, location="form", help="Contract End Date: YYYY-MM-DD")
+contract_create_parser.add_argument("contract_value", type=float, required=False, location="form", help="Contract Value")
+contract_create_parser.add_argument("vat_rate", type=float, required=False, location="form", help="VAT Rate")
+contract_create_parser.add_argument("status", type=str, required=False, location="form", help="Contract Status: ACTIVE / COMPLETED / CANCELLED")
+contract_create_parser.add_argument("notes", type=str, required=False, location="form", help="Notes")
+contract_create_parser.add_argument("document", type=FileStorage, required=False, location="files", help="Contract Document")
+
+contract_update_parser = ns.parser()
+contract_update_parser.add_argument("id_work_item", type=int, required=True, location="form", help="Work Item ID")
+contract_update_parser.add_argument("contract_number", type=str, required=True, location="form", help="Contract Number")
+contract_update_parser.add_argument("contract_date", type=str, required=True, location="form", help="Contract Date: YYYY-MM-DD")
+contract_update_parser.add_argument("start_date", type=str, required=False, location="form", help="Contract Start Date: YYYY-MM-DD")
+contract_update_parser.add_argument("end_date", type=str, required=False, location="form", help="Contract End Date: YYYY-MM-DD")
+contract_update_parser.add_argument("contract_value", type=float, required=False, location="form", help="Contract Value")
+contract_update_parser.add_argument("vat_rate", type=float, required=False, location="form", help="VAT Rate")
+contract_update_parser.add_argument("status", type=str, required=False, location="form", help="Contract Status: ACTIVE / COMPLETED / CANCELLED")
+contract_update_parser.add_argument("notes", type=str, required=False, location="form", help="Notes")
+contract_update_parser.add_argument("document", type=FileStorage, required=False, location="files", help="Contract Document")
+
 contract_filter_parser = ns.parser()
 contract_filter_parser.add_argument("stage", type=str, required=False, default="ACTIVE", choices=("ACTIVE", "CLOSED"), location="args", help="Filter berdasarkan stage Work Item. ACTIVE untuk semua stage selain CLOSED, CLOSED untuk Work Item yang sudah ditutup.")
 contract_filter_parser.add_argument("status", type=str, required=False, choices=("ACTIVE", "COMPLETED", "CANCELLED"), location="args", help="Filter berdasarkan status contract.")
@@ -77,18 +102,35 @@ class ContractListResource(Resource):
             message="Data kontrak berhasil diambil"
         )
 
+
     @jwt_required()
-    @ns.expect(contract_create_model)
+    @ns.expect(contract_create_parser)
     @measure_execution_time
     def post(self):
         """Create Work Item Contract"""
 
-        body = request.json or {}
+        args = contract_create_parser.parse_args()
+
+        body = {
+            "id_work_item": args.get("id_work_item"),
+            "contract_number": args.get("contract_number"),
+            "contract_date": args.get("contract_date"),
+            "start_date": args.get("start_date"),
+            "end_date": args.get("end_date"),
+            "contract_value": args.get("contract_value"),
+            "vat_rate": args.get("vat_rate"),
+            "status": args.get("status"),
+            "notes": args.get("notes"),
+        }
+
+        document = args.get("document")
+
         created_by = get_jwt().get("display_name")
 
         data = create_contract_service(
             body=body,
-            created_by=created_by
+            created_by=created_by,
+            document=document
         )
 
         return success(
@@ -114,18 +156,34 @@ class ContractDetailResource(Resource):
     
     
     @jwt_required()
-    @ns.expect(contract_update_model)
+    @ns.expect(contract_update_parser)
     @measure_execution_time
     def put(self, id_contract):
         """Update Work Item Contract"""
 
-        body = request.json or {}
+        args = contract_update_parser.parse_args()
+
+        body = {
+            "id_work_item": args.get("id_work_item"),
+            "contract_number": args.get("contract_number"),
+            "contract_date": args.get("contract_date"),
+            "start_date": args.get("start_date"),
+            "end_date": args.get("end_date"),
+            "contract_value": args.get("contract_value"),
+            "vat_rate": args.get("vat_rate"),
+            "status": args.get("status"),
+            "notes": args.get("notes"),
+        }
+
+        document = args.get("document")
+
         updated_by = get_jwt().get("display_name")
 
         data = update_contract_service(
             id_contract=id_contract,
             body=body,
-            updated_by=updated_by
+            updated_by=updated_by,
+            document=document
         )
 
         return success(

@@ -1,5 +1,6 @@
 from flask import request
 from flask_jwt_extended import jwt_required, get_jwt
+from werkzeug.datastructures import FileStorage
 from flask_restx import Resource, fields
 
 from api.shared.response import success
@@ -38,6 +39,20 @@ completion_edit_model = ns.model(
 
 # ======================= #ANCHOR - FILTER PARSER ============================ #
 
+completion_create_parser = ns.parser()
+completion_create_parser.add_argument("id_work_item", type=int, required=True, location="form", help="Work Item ID")
+completion_create_parser.add_argument("ba_number", type=str, required=True, location="form", help="BA Number")
+completion_create_parser.add_argument("ba_date", type=str, required=False, location="form", help="BA Date: YYYY-MM-DD")
+completion_create_parser.add_argument("document", type=FileStorage, required=False, location="files", help="BA Document")
+completion_create_parser.add_argument("notes", type=str, required=False, location="form", help="Notes")
+
+completion_edit_parser = ns.parser()
+completion_edit_parser.add_argument("id_work_item", type=int, required=True, location="form", help="Work Item ID")
+completion_edit_parser.add_argument("ba_number", type=str, required=True, location="form", help="BA Number")
+completion_edit_parser.add_argument("ba_date", type=str, required=True, location="form", help="BA Date: YYYY-MM-DD")
+completion_edit_parser.add_argument("notes", type=str, required=False, location="form", help="Notes")
+completion_edit_parser.add_argument("document", type=FileStorage, required=False, location="files", help="BA Document")
+
 completion_filter_parser = ns.parser()
 completion_filter_parser.add_argument("stage", type=str, required=False, default="ACTIVE", choices=("ACTIVE", "CLOSED"), location="args", help="Filter berdasarkan stage Work Item. ACTIVE untuk semua stage selain CLOSED, CLOSED untuk Work Item yang sudah ditutup.")
 completion_filter_parser.add_argument("search", type=str, required=False, location="args", help="Search by BA number, work number, work name, or client name.")
@@ -70,18 +85,30 @@ class CompletionListResource(Resource):
             message="Data BA berhasil diambil"
         )
 
+    
     @jwt_required()
-    @ns.expect(completion_create_model)
+    @ns.expect(completion_create_parser)
     @measure_execution_time
     def post(self):
         """Create Work Item Completion / BA"""
 
-        body = request.json or {}
+        args = completion_create_parser.parse_args()
+
+        body = {
+            "id_work_item": args.get("id_work_item"),
+            "ba_number": args.get("ba_number"),
+            "ba_date": args.get("ba_date"),
+            "notes": args.get("notes"),
+        }
+
+        document = args.get("document")
+
         created_by = get_jwt().get("display_name")
 
         data = create_completion_service(
             body=body,
-            created_by=created_by
+            created_by=created_by,
+            document=document
         )
 
         return success(
@@ -107,19 +134,29 @@ class CompletionDetailResource(Resource):
     
     
     @jwt_required()
-    @ns.expect(completion_edit_model)
+    @ns.expect(completion_edit_parser)
     @measure_execution_time
     def put(self, id_completion):
         """Edit Work Item Completion / BA"""
 
-        data = request.json or {}
+        args = completion_edit_parser.parse_args()
+
+        data = {
+            "id_work_item": args.get("id_work_item"),
+            "ba_number": args.get("ba_number"),
+            "ba_date": args.get("ba_date"),
+            "notes": args.get("notes"),
+        }
+
+        document = args.get("document")
 
         updated_by = get_jwt().get("display_name")
 
         result = update_completion_service(
             id_completion=id_completion,
             data=data,
-            updated_by=updated_by
+            updated_by=updated_by,
+            document=document
         )
 
         return success(

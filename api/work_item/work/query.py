@@ -50,7 +50,7 @@ def get_work_item_by_id(id_work_item):
     sql = text("""
         SELECT
             id_work_item, work_number, work_name, work_type, id_client, id_client_pic, internal_pic_name, 
-            current_stage, progress_percent, start_date, target_end_date, completion_date, notes, 
+            current_stage, progress_percent, start_date, target_end_date, completion_date, document_url, notes, 
             is_active, created_by, created_at, updated_by, updated_at
         FROM work_items
         WHERE
@@ -164,8 +164,8 @@ def get_work_item_list(stage="ACTIVE", current_stage=None, search=None, work_typ
     sql = text(f"""
         SELECT
             wi.id_work_item, wi.work_number, wi.work_name, wi.work_type, wi.id_client, c.code AS client_code, 
-            c.name AS client_name, wi.id_client_pic, cp.name AS client_pic_name, wi.internal_pic_name, 
-            wi.current_stage, wi.progress_percent, wi.start_date, wi.target_end_date, wi.completion_date, wi.notes, 
+            c.name AS client_name, wi.id_client_pic, cp.name AS client_pic_name, wi.internal_pic_name, wi.current_stage, 
+            wi.progress_percent, wi.start_date, wi.target_end_date, wi.completion_date, wi.document_url, wi.notes, 
             wi.created_by, wi.created_at, wi.updated_by, wi.updated_at
         FROM work_items wi
         LEFT JOIN client c
@@ -259,11 +259,13 @@ def create_work_item(body: dict):
     sql_work_item = text("""
         INSERT INTO work_items (
             work_number, work_name, work_type, id_client, id_client_pic, internal_pic_name, current_stage, 
-            progress_percent, start_date, target_end_date, notes, is_active, created_by, created_at, updated_at
+            progress_percent, start_date, target_end_date, document_url, notes, 
+            is_active, created_by, created_at, updated_at
         )
         VALUES (
             :work_number, :work_name, :work_type, :id_client, :id_client_pic, :internal_pic_name, 'IDENTIFIED', 
-            :progress_percent, :start_date, :target_end_date, :notes, 1, :created_by, :now, :now
+            :progress_percent, :start_date, :target_end_date, :document_url, :notes, 
+            1, :created_by, :now, :now
         )
         RETURNING id_work_item
     """)
@@ -288,7 +290,11 @@ def create_work_item(body: dict):
                 "work_name": body["work_name"].strip(),
                 "work_type": body["work_type"],
                 "id_client": body["id_client"],
-                "id_client_pic": body.get("id_client_pic"),
+                "id_client_pic": (
+                    body.get("id_client_pic")
+                    if body.get("id_client_pic")
+                    else None
+                ),
                 "internal_pic_name": (
                     body["internal_pic_name"].strip()
                     if body.get("internal_pic_name")
@@ -301,6 +307,7 @@ def create_work_item(body: dict):
                 ),
                 "start_date": body.get("start_date"),
                 "target_end_date": body.get("target_end_date"),
+                "document_url": body.get("document_url"),
                 "notes": body.get("notes"),
                 "created_by": body["created_by"],
                 "now": now
@@ -329,8 +336,8 @@ def get_work_item_detail(id_work_item):
             wi.id_work_item, wi.work_number, wi.work_name, wi.work_type, wi.id_client, c.code AS client_code, 
             c.name AS client_name, wi.id_client_pic, cp.name AS client_pic_name, cp.position AS client_pic_position, 
             cp.phone AS client_pic_phone, cp.email AS client_pic_email, wi.internal_pic_name, wi.current_stage, 
-            wi.progress_percent, wi.start_date, wi.target_end_date, wi.completion_date, wi.notes, wi.is_active, 
-            wi.created_by, wi.created_at, wi.updated_by, wi.updated_at
+            wi.progress_percent, wi.start_date, wi.target_end_date, wi.completion_date, wi.document_url, wi.notes, 
+            wi.is_active, wi.created_by, wi.created_at, wi.updated_by, wi.updated_at
         FROM work_items wi
         LEFT JOIN client c
             ON c.id_client = wi.id_client
@@ -512,6 +519,7 @@ def update_work_item(id_work_item, body):
             internal_pic_name = :internal_pic_name,
             start_date = :start_date,
             target_end_date = :target_end_date,
+            document_url = :document_url,
             notes = :notes,
             updated_by = :updated_by,
             updated_at = :updated_at
@@ -540,6 +548,7 @@ def update_work_item(id_work_item, body):
                 ),
                 "start_date": body.get("start_date"),
                 "target_end_date": body.get("target_end_date"),
+                "document_url": body.get("document_url"),
                 "notes": body.get("notes"),
                 "updated_by": body["updated_by"],
                 "updated_at": now

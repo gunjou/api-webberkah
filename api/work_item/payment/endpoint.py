@@ -1,5 +1,6 @@
 from flask_jwt_extended import jwt_required, get_jwt
 from flask_restx import Resource, fields
+from werkzeug.datastructures import FileStorage
 
 from api.shared.response import success
 from api.utils.decorator import measure_execution_time
@@ -21,6 +22,14 @@ payment_model = ns.model(
     }
 )
 
+# ================================= PAYMENT PARSER ================================= #
+
+payment_create_parser = ns.parser()
+payment_create_parser.add_argument("id_invoice", type=int, required=True, location="form", help="Invoice ID")
+payment_create_parser.add_argument("payment_date", type=str, required=True, location="form", help="Tanggal pembayaran: YYYY-MM-DD")
+payment_create_parser.add_argument("amount", type=float, required=True, location="form", help="Nominal pembayaran")
+payment_create_parser.add_argument("notes", type=str, required=False, location="form", help="Catatan pembayaran")
+payment_create_parser.add_argument("document", type=FileStorage, required=False, location="files", help="Dokumen bukti pembayaran")
 
 # ================================= PAYMENT RESOURCE =============================== #
 
@@ -28,18 +37,28 @@ payment_model = ns.model(
 class PaymentResource(Resource):
 
     @jwt_required()
-    @ns.expect(payment_model)
+    @ns.expect(payment_create_parser)
     @measure_execution_time
     def post(self):
         """Create Work Item Payment"""
 
-        payload = ns.payload
+        args = payment_create_parser.parse_args()
+
+        body = {
+            "id_invoice": args.get("id_invoice"),
+            "payment_date": args.get("payment_date"),
+            "amount": args.get("amount"),
+            "notes": args.get("notes"),
+        }
+
+        document = args.get("document")
 
         created_by = get_jwt().get("display_name")
 
         data = create_payment_service(
-            payload=payload,
-            created_by=created_by
+            payload=body,
+            created_by=created_by,
+            document=document
         )
 
         return success(

@@ -12,7 +12,7 @@ def get_work_item_by_id(id_work_item):
     sql = text("""
         SELECT
             id_work_item, work_number, work_name, work_type, id_client, id_client_pic, internal_pic_name, 
-            current_stage, progress_percent, start_date, target_end_date, completion_date, notes, 
+            current_stage, progress_percent, start_date, target_end_date, completion_date, document_url, notes, 
             is_active, created_by, created_at, updated_by, updated_at
         FROM work_items
         WHERE
@@ -249,21 +249,20 @@ def get_completion_list(stage="ACTIVE", search=None, id_work_item=None, id_clien
     return response
 
 
-def create_completion(id_work_item, ba_number, ba_date, completion_date, document_url, notes, created_by):
+def create_completion(id_work_item, ba_number, ba_date, document_url, notes, created_by):
 
     now = get_wita()
 
     with engine.begin() as conn:
 
-        # 1. Insert BA
+        # ------------------------------- 1. Insert BA ------------------------------- #
+
         insert_query = text("""
             INSERT INTO work_completions (
-                id_work_item, ba_number, ba_date, completion_date, document_url, notes, 
-                is_active, created_by, created_at, updated_at
+                id_work_item, ba_number, ba_date, document_url, notes, is_active, created_by, created_at, updated_at
             )
             VALUES (
-                :id_work_item, :ba_number, :ba_date, :completion_date, :document_url, :notes, 
-                1, :created_by, :created_at, :updated_at
+                :id_work_item, :ba_number, :ba_date, :document_url, :notes, 1, :created_by, :created_at, :updated_at
             )
             RETURNING id_completion
         """)
@@ -274,7 +273,6 @@ def create_completion(id_work_item, ba_number, ba_date, completion_date, documen
                 "id_work_item": id_work_item,
                 "ba_number": ba_number,
                 "ba_date": ba_date,
-                "completion_date": completion_date,
                 "document_url": document_url,
                 "notes": notes,
                 "created_by": created_by,
@@ -285,7 +283,8 @@ def create_completion(id_work_item, ba_number, ba_date, completion_date, documen
 
         id_completion = result["id_completion"]
 
-        # 2. Tutup stage history CONTRACT
+        # ---------------------- 2. Tutup stage history CONTRACT --------------------- #
+
         close_history_query = text("""
             UPDATE work_stage_histories
             SET
@@ -305,7 +304,8 @@ def create_completion(id_work_item, ba_number, ba_date, completion_date, documen
             }
         )
 
-        # 3. Update current stage Work Item
+        # --------------------- 3. Update current stage Work Item -------------------- #
+
         update_work_query = text("""
             UPDATE work_items
             SET
@@ -326,7 +326,8 @@ def create_completion(id_work_item, ba_number, ba_date, completion_date, documen
             }
         )
 
-        # 4. Buat stage history BA
+        # ------------------------- 4. Buat stage history BA ------------------------- #
+
         insert_history_query = text("""
             INSERT INTO work_stage_histories (
                 id_work_item, stage, started_at, ended_at, notes, is_active, created_by, created_at
@@ -384,7 +385,9 @@ def get_completion_detail(id_completion):
     return dict(result) if result else None
 
 
-def update_completion(id_completion, id_work_item, ba_number, ba_date, completion_date, document_url, notes, updated_by):
+def update_completion(id_completion, id_work_item, ba_number, ba_date, document_url, notes, updated_by):
+
+    now = get_wita()
 
     query = text("""
         UPDATE work_completions
@@ -392,31 +395,35 @@ def update_completion(id_completion, id_work_item, ba_number, ba_date, completio
             id_work_item = :id_work_item,
             ba_number = :ba_number,
             ba_date = :ba_date,
-            completion_date = :completion_date,
-            document_url = :document_url,
+            document_url = COALESCE(:document_url, document_url),
             notes = :notes,
             updated_by = :updated_by,
             updated_at = :updated_at
-        WHERE id_completion = :id_completion
-          AND is_active = 1
+        WHERE
+            id_completion = :id_completion
+            AND is_active = 1
+
+        RETURNING
+            id_completion, id_work_item, ba_number, ba_date, document_url, notes, updated_by, updated_at
     """)
 
     with engine.begin() as conn:
 
-        conn.execute(
+        result = conn.execute(
             query,
             {
                 "id_completion": id_completion,
                 "id_work_item": id_work_item,
                 "ba_number": ba_number,
                 "ba_date": ba_date,
-                "completion_date": completion_date,
                 "document_url": document_url,
                 "notes": notes,
                 "updated_by": updated_by,
-                "updated_at": get_wita()
+                "updated_at": now
             }
-        )
+        ).mappings().first()
+
+    return dict(result) if result else None
 
 
 def delete_completion(id_completion, id_work_item, updated_by):

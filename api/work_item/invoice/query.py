@@ -591,7 +591,7 @@ def create_invoice(id_work_item, id_completion, invoice_number, invoice_date, in
 
     with engine.begin() as conn:
 
-        # ============================= 1. INSERT INVOICE ============================ #
+        # ----------------------------- 1. INSERT INVOICE ---------------------------- #
 
         insert_invoice_query = text("""
             INSERT INTO work_invoices (
@@ -627,7 +627,7 @@ def create_invoice(id_work_item, id_completion, invoice_number, invoice_date, in
 
         invoice = dict(result)
 
-        # ========================= 2. CLOSE BA STAGE HISTORY ======================== #
+        # ------------------------- 2. CLOSE BA STAGE HISTORY ------------------------ #
 
         close_history_query = text("""
             UPDATE work_stage_histories
@@ -648,7 +648,7 @@ def create_invoice(id_work_item, id_completion, invoice_number, invoice_date, in
             }
         )
 
-        # ========================= 3. UPDATE WORK ITEM STAGE ======================== #
+        # ------------------------- 3. UPDATE WORK ITEM STAGE ------------------------ #
 
         update_work_query = text("""
             UPDATE work_items
@@ -670,8 +670,8 @@ def create_invoice(id_work_item, id_completion, invoice_number, invoice_date, in
             }
         )
 
-        # ====================== 4. CREATE INVOICE STAGE HISTORY ===================== #
-        
+        # ---------------------- 4. CREATE INVOICE STAGE HISTORY --------------------- #
+
         insert_history_query = text("""
             INSERT INTO work_stage_histories (
                 id_work_item, stage, started_at, ended_at, notes, is_active, created_by, created_at
@@ -1029,17 +1029,19 @@ def update_invoice(id_invoice, id_work_item, id_completion, invoice_number, invo
             invoice_value = :invoice_value,
             vat_rate = :vat_rate,
             due_date = :due_date,
-            document_url = :document_url,
+            document_url = COALESCE(:document_url, document_url),
             notes = :notes,
             updated_by = :updated_by,
             updated_at = :updated_at
         WHERE id_invoice = :id_invoice
           AND is_active = 1
+        RETURNING
+            id_invoice, id_work_item, id_completion, invoice_number, invoice_date, invoice_value, vat_rate, due_date, document_url, notes, updated_by, updated_at
     """)
 
     with engine.begin() as conn:
 
-        conn.execute(
+        result = conn.execute(
             query,
             {
                 "id_invoice": id_invoice,
@@ -1055,7 +1057,9 @@ def update_invoice(id_invoice, id_work_item, id_completion, invoice_number, invo
                 "updated_by": updated_by,
                 "updated_at": get_wita()
             }
-        )
+        ).mappings().first()
+
+    return dict(result) if result else None
 
 
 def delete_invoice(id_invoice, id_work_item, updated_by):

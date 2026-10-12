@@ -1,4 +1,5 @@
 from api.shared.exceptions import ValidationError, NotFoundError
+from api.work_item.helper import upload_work_item_document
 from .query import *
 
 
@@ -43,7 +44,7 @@ def get_quotation_list_service(filters: dict):
     )
 
 
-def create_quotation_service(body: dict):
+def create_quotation_service(body: dict, document=None):
 
     if not body.get("id_work_item"):
         raise ValidationError("Work item wajib dipilih.")
@@ -54,59 +55,67 @@ def create_quotation_service(body: dict):
     if not body.get("proposal_date"):
         raise ValidationError("Tanggal penawaran wajib diisi.")
 
-    # ---------------------------------------------------------------------- #
     # Check Work Item
-    # ---------------------------------------------------------------------- #
-
+    
     work_item = get_work_item_by_id(body["id_work_item"])
 
     if not work_item:
         raise NotFoundError("Work item tidak ditemukan.")
 
-    # ---------------------------------------------------------------------- #
-    # Validate Work Item Stage
-    # ---------------------------------------------------------------------- #
-
+    # Validate Stage
+    
     if work_item["current_stage"] != "IDENTIFIED":
-        raise ValidationError("Penawaran hanya dapat dibuat ketika work item berada pada stage IDENTIFIED.")
+        raise ValidationError(
+            "Penawaran hanya dapat dibuat ketika work item berada pada stage IDENTIFIED."
+        )
 
-    # ---------------------------------------------------------------------- #
-    # Check duplicate quotation number
-    # ---------------------------------------------------------------------- #
-
+    # Duplicate
+    
     duplicate = get_quotation_by_number(body["proposal_number"])
 
     if duplicate:
         raise ValidationError("Nomor penawaran sudah digunakan.")
 
-    # ---------------------------------------------------------------------- #
-    # Validate proposal value
-    # ---------------------------------------------------------------------- #
-
+    # Proposal Value
+    
     if body.get("proposal_value") is not None:
-
         try:
             proposal_value = float(body["proposal_value"])
         except (TypeError, ValueError):
             raise ValidationError("Nilai penawaran harus berupa angka.")
 
         if proposal_value < 0:
-            raise ValidationError("Nilai penawaran tidak boleh kurang dari 0.")
+            raise ValidationError(
+                "Nilai penawaran tidak boleh kurang dari 0."
+            )
 
-    # ---------------------------------------------------------------------- #
-    # Validate status
-    # ---------------------------------------------------------------------- #
-
+    # Status
+    
     status = body.get("status") or "DRAFT"
 
-    if status not in ("DRAFT", "SUBMITTED", "WON", "LOST", "EXPIRED", "CANCELLED"):
+    if status not in (
+        "DRAFT",
+        "SUBMITTED",
+        "WON",
+        "LOST",
+        "EXPIRED",
+        "CANCELLED"
+    ):
         raise ValidationError("Status penawaran tidak valid.")
 
     body["status"] = status
 
-    # ---------------------------------------------------------------------- #
-    # Create Quotation + Update Stage
-    # ---------------------------------------------------------------------- #
+    # Upload Document
+
+    if document:
+        body["document_url"] = upload_work_item_document(
+            document,
+            "penawaran"
+        )
+    else:
+        body["document_url"] = None
+
+    # Create
 
     return create_quotation(body)
 
@@ -124,7 +133,7 @@ def get_quotation_detail_service(id_proposal):
     return quotation
 
 
-def update_quotation_service(id_proposal, body, updated_by):
+def update_quotation_service(id_proposal, body, updated_by, document=None):
 
     if not id_proposal:
         raise ValidationError("ID penawaran wajib diisi")
@@ -164,15 +173,36 @@ def update_quotation_service(id_proposal, body, updated_by):
 
     proposal_value = body.get("proposal_value")
 
-    if proposal_value is not None and proposal_value < 0:
-        raise ValidationError("Nilai penawaran tidak boleh kurang dari 0")
+    if proposal_value is not None:
+        try:
+            proposal_value = float(proposal_value)
+        except (TypeError, ValueError):
+            raise ValidationError("Nilai penawaran harus berupa angka")
 
-    status = body.get("status", "DRAFT")
+        if proposal_value < 0:
+            raise ValidationError("Nilai penawaran tidak boleh kurang dari 0")
 
-    allowed_status = ["DRAFT", "SUBMITTED", "WON", "LOST", "EXPIRED", "CANCELLED"]
+    status = body.get("status") or "DRAFT"
+
+    allowed_status = [
+        "DRAFT",
+        "SUBMITTED",
+        "WON",
+        "LOST",
+        "EXPIRED",
+        "CANCELLED"
+    ]
 
     if status not in allowed_status:
         raise ValidationError("Status penawaran tidak valid")
+
+    document_url = None
+
+    if document:
+        document_url = upload_work_item_document(
+            document,
+            "penawaran"
+        )
 
     return update_quotation(
         id_proposal=id_proposal,
@@ -183,6 +213,7 @@ def update_quotation_service(id_proposal, body, updated_by):
         valid_until=body.get("valid_until"),
         status=status,
         notes=body.get("notes"),
+        document_url=document_url,
         updated_by=updated_by
     )
 

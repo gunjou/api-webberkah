@@ -1,5 +1,6 @@
 from flask import request
 from flask_jwt_extended import jwt_required, get_jwt
+from werkzeug.datastructures import FileStorage
 from flask_restx import Resource, fields
 
 from api.shared.response import success
@@ -43,6 +44,28 @@ invoice_edit_model = ns.model(
 
 # ======================= #ANCHOR - FILTER PARSER ============================ #
 
+invoice_create_parser = ns.parser()
+invoice_create_parser.add_argument("id_work_item", type=int, required=True, location="form", help="Work Item ID")
+invoice_create_parser.add_argument("id_completion", type=int, required=False, location="form", help="ID BA")
+invoice_create_parser.add_argument("invoice_number", type=str, required=True, location="form", help="Invoice Number")
+invoice_create_parser.add_argument("invoice_date", type=str, required=True, location="form", help="Invoice Date: YYYY-MM-DD")
+invoice_create_parser.add_argument("invoice_value", type=float, required=True, location="form", help="Invoice Value")
+invoice_create_parser.add_argument("vat_rate", type=float, required=False, location="form", help="VAT Rate")
+invoice_create_parser.add_argument("due_date", type=str, required=False, location="form", help="Invoice Due Date: YYYY-MM-DD")
+invoice_create_parser.add_argument("notes", type=str, required=False, location="form", help="Notes")
+invoice_create_parser.add_argument("document", type=FileStorage, required=False, location="files", help="Invoice Document")
+
+invoice_update_parser = ns.parser()
+invoice_update_parser.add_argument("id_work_item", type=int, required=True, location="form", help="Work Item ID")
+invoice_update_parser.add_argument("id_completion", type=int, required=False, location="form", help="ID BA")
+invoice_update_parser.add_argument("invoice_number", type=str, required=True, location="form", help="Invoice Number")
+invoice_update_parser.add_argument("invoice_date", type=str, required=True, location="form", help="Invoice Date: YYYY-MM-DD")
+invoice_update_parser.add_argument("invoice_value", type=float, required=True, location="form", help="Invoice Value")
+invoice_update_parser.add_argument("vat_rate", type=float, required=False, location="form", help="VAT Rate")
+invoice_update_parser.add_argument("due_date", type=str, required=False, location="form", help="Invoice Due Date: YYYY-MM-DD")
+invoice_update_parser.add_argument("notes", type=str, required=False, location="form", help="Notes")
+invoice_update_parser.add_argument("document", type=FileStorage, required=False, location="files", help="Invoice Document")
+
 invoice_parser = ns.parser()
 invoice_parser.add_argument( "stage", type=str, required=False, default="ACTIVE", location="args", choices=("ACTIVE", "CLOSED"), help="Filter stage work item. ACTIVE untuk semua stage selain CLOSED, CLOSED untuk work item yang sudah ditutup.")
 invoice_parser.add_argument( "health_status", type=str, required=False, location="args", choices=("PAID", "OVERDUE", "DUE_SOON", "ON_TRACK"), help="Filter berdasarkan kondisi kesehatan invoice.")
@@ -76,22 +99,36 @@ class InvoiceResource(Resource):
 
 
     @jwt_required()
-    @ns.expect(invoice_create_model)
+    @ns.expect(invoice_create_parser)
     @measure_execution_time
     def post(self):
         """Create Work Item Invoice"""
 
-        data = request.json or {}
+        args = invoice_create_parser.parse_args()
+
+        body = {
+            "id_work_item": args.get("id_work_item"),
+            "id_completion": args.get("id_completion"),
+            "invoice_number": args.get("invoice_number"),
+            "invoice_date": args.get("invoice_date"),
+            "invoice_value": args.get("invoice_value"),
+            "vat_rate": args.get("vat_rate"),
+            "due_date": args.get("due_date"),
+            "notes": args.get("notes"),
+        }
+
+        document = args.get("document")
 
         created_by = get_jwt().get("display_name")
 
-        result = create_invoice_service(
-            data=data,
-            created_by=created_by
+        data = create_invoice_service(
+            body=body,
+            created_by=created_by,
+            document=document
         )
 
         return success(
-            data=result,
+            data=data,
             message="Invoice berhasil dibuat"
         )
 
@@ -113,23 +150,37 @@ class InvoiceDetailResource(Resource):
     
     
     @jwt_required()
-    @ns.expect(invoice_edit_model)
+    @ns.expect(invoice_update_parser)
     @measure_execution_time
     def put(self, id_invoice):
-        """Edit Work Item Invoice"""
+        """Update Work Item Invoice"""
 
-        data = request.json or {}
+        args = invoice_update_parser.parse_args()
+
+        body = {
+            "id_work_item": args.get("id_work_item"),
+            "id_completion": args.get("id_completion"),
+            "invoice_number": args.get("invoice_number"),
+            "invoice_date": args.get("invoice_date"),
+            "invoice_value": args.get("invoice_value"),
+            "vat_rate": args.get("vat_rate"),
+            "due_date": args.get("due_date"),
+            "notes": args.get("notes"),
+        }
+
+        document = args.get("document")
 
         updated_by = get_jwt().get("display_name")
 
-        result = update_invoice_service(
+        data = update_invoice_service(
             id_invoice=id_invoice,
-            data=data,
-            updated_by=updated_by
+            body=body,
+            updated_by=updated_by,
+            document=document
         )
 
         return success(
-            data=result,
+            data=data,
             message="Invoice berhasil diperbarui"
         )
     

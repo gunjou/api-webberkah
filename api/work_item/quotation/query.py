@@ -11,7 +11,7 @@ def get_work_item_by_id(id_work_item):
     sql = text("""
         SELECT
             id_work_item, work_number, work_name, work_type, id_client, id_client_pic, internal_pic_name, 
-            current_stage, progress_percent, start_date, target_end_date, completion_date, notes, 
+            current_stage, progress_percent, start_date, target_end_date, completion_date, document_url, notes, 
             is_active, created_by, created_at, updated_by, updated_at
         FROM work_items
         WHERE
@@ -63,7 +63,7 @@ def get_quotation_by_id(id_proposal):
     query = text("""
         SELECT
             id_proposal, id_work_item, proposal_number, proposal_date, proposal_value, valid_until, 
-            status, notes, is_active, created_by, created_at, updated_by, updated_at
+            status, document_url, notes, is_active, created_by, created_at, updated_by, updated_at
         FROM work_proposals
         WHERE id_proposal = :id_proposal
           AND is_active = 1
@@ -93,7 +93,7 @@ def get_quotation_list(stage="ACTIVE", search=None, status=None, id_work_item=No
 
     params = {}
 
-    # =================================== Stage ================================== #
+    # ----------------------------------- Stage ---------------------------------- #
 
     if stage == "ACTIVE":
         conditions.append(
@@ -105,7 +105,7 @@ def get_quotation_list(stage="ACTIVE", search=None, status=None, id_work_item=No
             "wi.current_stage = 'CLOSED'"
         )
 
-    # ================================== Search ================================== #
+    # ---------------------------------- Search ---------------------------------- #
 
     if search:
         conditions.append(
@@ -114,7 +114,7 @@ def get_quotation_list(stage="ACTIVE", search=None, status=None, id_work_item=No
 
         params["search"] = f"%{search.strip()}%"
 
-    # ================================== Status ================================== #
+    # ---------------------------------- Status ---------------------------------- #
 
     if status:
         conditions.append(
@@ -123,7 +123,7 @@ def get_quotation_list(stage="ACTIVE", search=None, status=None, id_work_item=No
 
         params["status"] = status
 
-    # ================================= Work Item ================================ #
+    # --------------------------------- Work Item -------------------------------- #
 
     if id_work_item:
         conditions.append(
@@ -132,7 +132,7 @@ def get_quotation_list(stage="ACTIVE", search=None, status=None, id_work_item=No
 
         params["id_work_item"] = id_work_item
 
-    # ================================== Client ================================== #
+    # ---------------------------------- Client ---------------------------------- #
 
     if id_client:
         conditions.append(
@@ -143,7 +143,7 @@ def get_quotation_list(stage="ACTIVE", search=None, status=None, id_work_item=No
 
     where_clause = " AND ".join(conditions)
 
-    # ================================ Pagination ================================ #
+    # -------------------------------- Pagination -------------------------------- #
 
     pagination_clause = ""
 
@@ -162,13 +162,13 @@ def get_quotation_list(stage="ACTIVE", search=None, status=None, id_work_item=No
             OFFSET :offset
         """
 
-    # =================================== Query ================================== #
+    # ----------------------------------- Query ---------------------------------- #
 
     sql = text(f"""
         SELECT
             wp.id_proposal, wp.id_work_item, wi.work_number, wi.work_name, wi.current_stage, wi.id_client, 
             c.code AS client_code, c.name AS client_name, wi.id_client_pic, cp.name AS client_pic_name, 
-            wp.proposal_number, wp.proposal_date, wp.proposal_value, wp.valid_until, wp.status, wp.notes, 
+            wp.proposal_number, wp.proposal_date, wp.proposal_value, wp.valid_until, wp.status, wp.document_url, wp.notes, 
             wp.created_by, wp.created_at, wp.updated_by, wp.updated_at
         FROM work_proposals wp
         INNER JOIN work_items wi
@@ -184,7 +184,7 @@ def get_quotation_list(stage="ACTIVE", search=None, status=None, id_work_item=No
         {pagination_clause}
     """)
 
-    # =================================== Count ================================== #
+    # ----------------------------------- Count ---------------------------------- #
 
     sql_count = text(f"""
         SELECT COUNT(*) AS total
@@ -211,7 +211,7 @@ def get_quotation_list(stage="ACTIVE", search=None, status=None, id_work_item=No
         "total": total
     }
 
-    # ============================ Pagination Response =========================== #
+    # ---------------------------- Pagination Response --------------------------- #
 
     if (
         stage == "CLOSED"
@@ -238,19 +238,17 @@ def create_quotation(body: dict):
 
     with engine.begin() as conn:
 
-        # ------------------------------------------------------------------ #
-        # Create Quotation
-        # ------------------------------------------------------------------ #
+        # ----------------------------- Create Quotation ----------------------------- #
 
         result = conn.execute(
             text("""
                 INSERT INTO work_proposals (
-                    id_work_item, proposal_number, proposal_date, proposal_value, valid_until, status, notes, 
-                    is_active, created_by, created_at, updated_at
+                    id_work_item, proposal_number, proposal_date, proposal_value, valid_until, status, document_url, 
+                    notes, is_active, created_by, created_at, updated_at
                 )
                 VALUES (
-                    :id_work_item, :proposal_number, :proposal_date, :proposal_value, :valid_until, :status, :notes, 
-                    1, :created_by, :now, :now
+                    :id_work_item, :proposal_number, :proposal_date, :proposal_value, :valid_until, :status, :document_url, 
+                    :notes, 1, :created_by, :now, :now
                 )
                 RETURNING id_proposal
             """),
@@ -261,6 +259,7 @@ def create_quotation(body: dict):
                 "proposal_value": body.get("proposal_value"),
                 "valid_until": body.get("valid_until"),
                 "status": body["status"],
+                "document_url": body.get("document_url"),
                 "notes": body.get("notes"),
                 "created_by": body["created_by"],
                 "now": now
@@ -269,9 +268,7 @@ def create_quotation(body: dict):
 
         id_proposal = result.scalar()
 
-        # ------------------------------------------------------------------ #
-        # Close Current Stage History
-        # ------------------------------------------------------------------ #
+        # ------------------------ Close Current Stage History ----------------------- #
 
         conn.execute(
             text("""
@@ -287,9 +284,7 @@ def create_quotation(body: dict):
             }
         )
 
-        # ------------------------------------------------------------------ #
-        # Update Work Item Stage
-        # ------------------------------------------------------------------ #
+        # -------------------------- Update Work Item Stage -------------------------- #
 
         conn.execute(
             text("""
@@ -308,9 +303,7 @@ def create_quotation(body: dict):
             }
         )
 
-        # ------------------------------------------------------------------ #
-        # Create Stage History
-        # ------------------------------------------------------------------ #
+        # --------------------------- Create Stage History --------------------------- #
 
         conn.execute(
             text("""
@@ -339,7 +332,7 @@ def get_quotation_detail(id_proposal):
             wp.id_proposal, wp.id_work_item, wi.work_number, wi.work_name, wi.work_type, wi.id_client, 
             c.code AS client_code, c.name AS client_name, wi.id_client_pic, cp.name AS client_pic_name, 
             cp.position AS client_pic_position, cp.phone AS client_pic_phone, cp.email AS client_pic_email, 
-            wp.proposal_number, wp.proposal_date, wp.proposal_value, wp.valid_until, wp.status, wp.notes, 
+            wp.proposal_number, wp.proposal_date, wp.proposal_value, wp.valid_until, wp.status, wp.document_url, wp.notes, 
             wp.is_active, wp.created_by, wp.created_at, wp.updated_by, wp.updated_at
         FROM work_proposals wp
         INNER JOIN work_items wi
@@ -364,7 +357,7 @@ def get_quotation_detail(id_proposal):
     return dict(result) if result else None
 
 
-def update_quotation(id_proposal, id_work_item, proposal_number, proposal_date, proposal_value, valid_until, status, notes, updated_by):
+def update_quotation(id_proposal, id_work_item, proposal_number, proposal_date, proposal_value, valid_until, status, notes, document_url, updated_by):
 
     query = text("""
         UPDATE work_proposals
@@ -375,14 +368,15 @@ def update_quotation(id_proposal, id_work_item, proposal_number, proposal_date, 
             proposal_value = :proposal_value,
             valid_until = :valid_until,
             status = :status,
+            document_url = COALESCE(:document_url, document_url),
             notes = :notes,
             updated_by = :updated_by,
             updated_at = :updated_at
         WHERE id_proposal = :id_proposal
           AND is_active = 1
         RETURNING
-            id_proposal, id_work_item, proposal_number, proposal_date, proposal_value, valid_until, status, notes, 
-            updated_by, updated_at
+            id_proposal, id_work_item, proposal_number, proposal_date, proposal_value, valid_until, 
+            status, document_url, notes, updated_by, updated_at
     """)
 
     with engine.begin() as conn:
@@ -397,6 +391,7 @@ def update_quotation(id_proposal, id_work_item, proposal_number, proposal_date, 
                 "proposal_value": proposal_value,
                 "valid_until": valid_until,
                 "status": status,
+                "document_url": document_url,
                 "notes": notes,
                 "updated_by": updated_by,
                 "updated_at": get_wita()
@@ -412,9 +407,7 @@ def delete_quotation(id_proposal: int, id_work_item: int, updated_by: str):
 
     with engine.begin() as conn:
 
-        # ------------------------------------------------------------------ #
-        # Soft Delete Quotation
-        # ------------------------------------------------------------------ #
+        # --------------------------- Soft Delete Quotation -------------------------- #
 
         conn.execute(
             text("""
@@ -433,9 +426,7 @@ def delete_quotation(id_proposal: int, id_work_item: int, updated_by: str):
             }
         )
 
-        # ------------------------------------------------------------------ #
-        # Close Current QUOTATION Stage History
-        # ------------------------------------------------------------------ #
+        # ------------------- Close Current QUOTATION Stage History ------------------ #
 
         conn.execute(
             text("""
@@ -452,9 +443,7 @@ def delete_quotation(id_proposal: int, id_work_item: int, updated_by: str):
             }
         )
 
-        # ------------------------------------------------------------------ #
-        # Update Work Item Stage
-        # ------------------------------------------------------------------ #
+        # -------------------------- Update Work Item Stage -------------------------- #
 
         conn.execute(
             text("""
@@ -473,9 +462,7 @@ def delete_quotation(id_proposal: int, id_work_item: int, updated_by: str):
             }
         )
 
-        # ------------------------------------------------------------------ #
-        # Create IDENTIFIED Stage History
-        # ------------------------------------------------------------------ #
+        # ---------------------- Create IDENTIFIED Stage History --------------------- #
 
         conn.execute(
             text("""
