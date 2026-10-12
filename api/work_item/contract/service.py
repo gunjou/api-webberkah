@@ -38,6 +38,7 @@ def get_contract_list_service(filters):
         stage=stage,
         search=filters.get("search"),
         status=filters.get("status"),
+        health_status=filters.get("health_status"),
         id_work_item=filters.get("id_work_item"),
         id_client=filters.get("id_client"),
         page=page,

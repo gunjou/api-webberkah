@@ -39,6 +39,7 @@ def get_work_item_list_service(filters: dict):
     return get_work_item_list(
         stage=stage,
         current_stage=filters.get("current_stage"),
+        health_status=filters.get("health_status"),
         search=filters.get("search"),
         work_type=filters.get("work_type"),
         id_client=filters.get("id_client"),

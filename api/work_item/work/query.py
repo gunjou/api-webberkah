@@ -72,7 +72,7 @@ def get_work_item_by_id(id_work_item):
 #                         #SECTION - WORK ITEM                                 #
 # ============================================================================ #
 
-def get_work_item_list(stage="ACTIVE", current_stage=None, search=None, work_type=None, id_client=None, page=None, per_page=None):
+def get_work_item_list(stage="ACTIVE", current_stage=None, health_status=None, search=None, work_type=None, id_client=None, page=None, per_page=None):
 
     conditions = [
         "wi.is_active = 1"
@@ -103,6 +103,41 @@ def get_work_item_list(stage="ACTIVE", current_stage=None, search=None, work_typ
         )
 
         params["current_stage"] = current_stage
+
+    # ============================ FILTER HEALTH STATUS ========================== #
+
+    if health_status:
+
+        if health_status == "COMPLETED":
+
+            conditions.append("""
+                wi.current_stage = 'CLOSED'
+            """)
+
+        elif health_status == "EXPIRED":
+
+            conditions.append("""
+                wi.current_stage <> 'CLOSED'
+                AND wi.target_end_date < CURRENT_DATE
+            """)
+
+        elif health_status == "DUE_SOON":
+
+            conditions.append("""
+                wi.current_stage <> 'CLOSED'
+                AND wi.target_end_date >= CURRENT_DATE
+                AND (wi.target_end_date - CURRENT_DATE) <= 30
+            """)
+
+        elif health_status == "ON_TRACK":
+
+            conditions.append("""
+                wi.current_stage <> 'CLOSED'
+                AND (
+                    wi.target_end_date > CURRENT_DATE + 30
+                    OR wi.target_end_date IS NULL
+                )
+            """)
 
     # =============================== FILTER SEARCH ============================== #
 
@@ -165,8 +200,34 @@ def get_work_item_list(stage="ACTIVE", current_stage=None, search=None, work_typ
         SELECT
             wi.id_work_item, wi.work_number, wi.work_name, wi.work_type, wi.id_client, c.code AS client_code, 
             c.name AS client_name, wi.id_client_pic, cp.name AS client_pic_name, wi.internal_pic_name, wi.current_stage, 
-            wi.progress_percent, wi.start_date, wi.target_end_date, wi.completion_date, wi.document_url, wi.notes, 
-            wi.created_by, wi.created_at, wi.updated_by, wi.updated_at
+            wi.progress_percent, wi.start_date, wi.target_end_date, wi.completion_date,
+
+            /* ========================= HEALTH ========================= */
+
+            CASE
+                WHEN wi.current_stage = 'CLOSED'
+                    THEN 'COMPLETED'
+
+                WHEN wi.target_end_date < CURRENT_DATE
+                    THEN 'EXPIRED'
+
+                WHEN wi.target_end_date >= CURRENT_DATE
+                     AND (wi.target_end_date - CURRENT_DATE) <= 30
+                    THEN 'DUE_SOON'
+
+                ELSE 'ON_TRACK'
+            END AS health_status,
+
+            CASE
+                WHEN wi.current_stage = 'CLOSED'
+                    THEN NULL
+
+                WHEN wi.target_end_date IS NULL
+                    THEN NULL
+
+                ELSE (wi.target_end_date - CURRENT_DATE)
+            END AS days_to_end,
+            wi.document_url, wi.notes, wi.created_by, wi.created_at, wi.updated_by, wi.updated_at
         FROM work_items wi
         LEFT JOIN client c
             ON c.id_client = wi.id_client
@@ -336,8 +397,25 @@ def get_work_item_detail(id_work_item):
             wi.id_work_item, wi.work_number, wi.work_name, wi.work_type, wi.id_client, c.code AS client_code, 
             c.name AS client_name, wi.id_client_pic, cp.name AS client_pic_name, cp.position AS client_pic_position, 
             cp.phone AS client_pic_phone, cp.email AS client_pic_email, wi.internal_pic_name, wi.current_stage, 
-            wi.progress_percent, wi.start_date, wi.target_end_date, wi.completion_date, wi.document_url, wi.notes, 
-            wi.is_active, wi.created_by, wi.created_at, wi.updated_by, wi.updated_at
+            wi.progress_percent, wi.start_date, wi.target_end_date, wi.completion_date, 
+            CASE
+                WHEN wi.current_stage = 'CLOSED'
+                    THEN 'COMPLETED'
+                WHEN wi.target_end_date < CURRENT_DATE
+                    THEN 'EXPIRED'
+                WHEN wi.target_end_date >= CURRENT_DATE
+                    AND (wi.target_end_date - CURRENT_DATE) <= 30
+                    THEN 'DUE_SOON'
+                ELSE 'ON_TRACK'
+            END AS health_status,
+            CASE
+                WHEN wi.current_stage = 'CLOSED'
+                    THEN NULL
+                WHEN wi.target_end_date IS NULL
+                    THEN NULL
+                ELSE (wi.target_end_date - CURRENT_DATE)
+            END AS days_to_end,
+            wi.document_url, wi.notes, wi.is_active, wi.created_by, wi.created_at, wi.updated_by, wi.updated_at
         FROM work_items wi
         LEFT JOIN client c
             ON c.id_client = wi.id_client

@@ -89,6 +89,13 @@ work_item_filter_parser.add_argument(
     ),
     location="args", help="Filter berdasarkan current stage work item."
 )
+work_item_filter_parser.add_argument(
+    "health_status", type=str, required=False,
+    choices=(
+        "COMPLETED", "EXPIRED", "DUE_SOON", "ON_TRACK"
+    ),
+    location="args", help="Filter berdasarkan health status work item."
+)
 work_item_filter_parser.add_argument("search", type=str, required=False, location="args", help="Search by work number or work name.")
 work_item_filter_parser.add_argument("work_type", type=str, required=False, choices=("TENDER", "MAINTENANCE"), location="args", help="Filter by work type.")
 work_item_filter_parser.add_argument("id_client", type=int, required=False, location="args", help="Filter by client ID.")

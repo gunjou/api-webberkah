@@ -87,7 +87,7 @@ def get_contract_by_id(id_contract):
 #                              #SECTION - CONTRACT                             #
 # ============================================================================ #
 
-def get_contract_list(stage="ACTIVE", search=None, status=None, id_work_item=None, id_client=None, page=None, per_page=None):
+def get_contract_list(stage="ACTIVE", search=None, status=None, health_status=None, id_work_item=None, id_client=None, page=None, per_page=None):
 
     conditions = [
         "wc.is_active = 1",
@@ -130,6 +130,72 @@ def get_contract_list(stage="ACTIVE", search=None, status=None, id_work_item=Non
         )
 
         params["status"] = status
+    
+    # =============================== Health ===================================== #
+
+    if health_status:
+        if health_status == "COMPLETED":
+            conditions.append("""
+                EXISTS (
+                    SELECT 1
+                    FROM work_stage_histories wsh
+                    WHERE wsh.id_work_item = wc.id_work_item
+                    AND wsh.stage = 'BA'
+                    AND wsh.is_active = 1
+                )
+            """)
+
+        elif health_status == "EXPIRED":
+            conditions.append("""
+                NOT EXISTS (
+                    SELECT 1
+                    FROM work_stage_histories wsh
+                    WHERE wsh.id_work_item = wc.id_work_item
+                    AND wsh.stage = 'BA'
+                    AND wsh.is_active = 1
+                )
+                AND wc.end_date IS NOT NULL
+                AND wc.end_date < CURRENT_DATE
+            """)
+
+        elif health_status == "DUE_SOON":
+            conditions.append("""
+                NOT EXISTS (
+                    SELECT 1
+                    FROM work_stage_histories wsh
+                    WHERE wsh.id_work_item = wc.id_work_item
+                    AND wsh.stage = 'BA'
+                    AND wsh.is_active = 1
+                )
+                AND wc.end_date IS NOT NULL
+                AND wc.end_date >= CURRENT_DATE
+                AND (wc.end_date - CURRENT_DATE) <= 30
+            """)
+
+        elif health_status == "ON_TRACK":
+            conditions.append("""
+                NOT EXISTS (
+                    SELECT 1
+                    FROM work_stage_histories wsh
+                    WHERE wsh.id_work_item = wc.id_work_item
+                    AND wsh.stage = 'BA'
+                    AND wsh.is_active = 1
+                )
+                AND wc.end_date IS NOT NULL
+                AND (wc.end_date - CURRENT_DATE) > 30
+            """)
+
+        elif health_status == "NO_DATE":
+            conditions.append("""
+                NOT EXISTS (
+                    SELECT 1
+                    FROM work_stage_histories wsh
+                    WHERE wsh.id_work_item = wc.id_work_item
+                    AND wsh.stage = 'BA'
+                    AND wsh.is_active = 1
+                )
+                AND wc.end_date IS NULL
+            """)
 
     # ================================= Work Item ================================ #
 
@@ -185,11 +251,71 @@ def get_contract_list(stage="ACTIVE", search=None, status=None, id_work_item=Non
     # ================================ Data Query ================================ #
 
     query = text(f"""
-        SELECT
+            SELECT
             wc.id_contract, wc.id_work_item, wi.work_number, wi.work_name, wi.work_type, wi.current_stage AS stage, 
             wi.id_client, c.code AS client_code, c.name AS client_name, wi.id_client_pic, cp.name AS client_pic_name, 
-            wc.contract_number, wc.contract_date, wc.start_date, wc.end_date, wc.contract_value, wc.vat_rate, 
-            wc.status, wc.document_url, wc.notes, wc.created_by, wc.created_at, wc.updated_by, wc.updated_at
+            wc.contract_number, wc.contract_date, wc.start_date, wc.end_date, 
+            wc.status, wc.document_url, wc.notes,
+            wc.contract_value,
+            wc.vat_rate,
+
+            (
+                wc.contract_value
+                * COALESCE(wc.vat_rate, 0)
+                / 100
+            ) AS vat_amount,
+
+            (
+                wc.contract_value
+                + (
+                    wc.contract_value
+                    * COALESCE(wc.vat_rate, 0)
+                    / 100
+                )
+            ) AS total_contract,
+            CASE
+                -- Work Item sudah mencapai BA
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM work_stage_histories wsh
+                    WHERE wsh.id_work_item = wc.id_work_item
+                    AND wsh.stage = 'BA'
+                    AND wsh.is_active = 1
+                )
+                    THEN 'COMPLETED'
+
+                -- Kontrak tidak memiliki end date
+                WHEN wc.end_date IS NULL
+                    THEN 'NO_DATE'
+
+                -- Kontrak sudah melewati end date
+                WHEN wc.end_date < CURRENT_DATE
+                    THEN 'EXPIRED'
+
+                -- Kontrak akan berakhir dalam <= 30 hari
+                WHEN (wc.end_date - CURRENT_DATE) <= 30
+                    THEN 'DUE_SOON'
+
+                -- Kontrak masih aman
+                ELSE 'ON_TRACK'
+            END AS health_status,
+
+            CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM work_stage_histories wsh
+                    WHERE wsh.id_work_item = wc.id_work_item
+                    AND wsh.stage = 'BA'
+                    AND wsh.is_active = 1
+                )
+                    THEN NULL
+
+                WHEN wc.end_date IS NULL
+                    THEN NULL
+
+                ELSE (wc.end_date - CURRENT_DATE)
+            END AS days_to_end,
+            wc.created_by, wc.created_at, wc.updated_by, wc.updated_at
         FROM work_contracts wc
         INNER JOIN work_items wi
             ON wi.id_work_item = wc.id_work_item
@@ -346,8 +472,55 @@ def get_contract_detail(id_contract):
             wc.id_contract, wc.id_work_item, wi.work_number, wi.work_name, wi.work_type, wi.current_stage, 
             wi.progress_percent, wi.id_client, c.code AS client_code, c.name AS client_name, wi.id_client_pic, 
             cp.name AS client_pic_name, cp.position AS client_pic_position, cp.phone AS client_pic_phone, 
-            cp.email AS client_pic_email, wc.contract_number, wc.contract_date, wc.start_date, wc.end_date, 
-            wc.contract_value, wc.vat_rate, wc.status, wc.document_url, wc.notes, 
+            cp.email AS client_pic_email, wc.contract_number, wc.contract_date, wc.start_date, wc.end_date,
+            wc.contract_value,
+            wc.vat_rate,
+            (
+                wc.contract_value
+                * COALESCE(wc.vat_rate, 0)
+                / 100
+            ) AS vat_amount,
+            (
+                wc.contract_value
+                + (
+                    wc.contract_value
+                    * COALESCE(wc.vat_rate, 0)
+                    / 100
+                )
+            ) AS total_contract,
+            wc.status,
+            wc.document_url,
+            wc.notes,
+            CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM work_stage_histories wsh
+                    WHERE wsh.id_work_item = wc.id_work_item
+                      AND wsh.stage = 'BA'
+                      AND wsh.is_active = 1
+                )
+                    THEN 'COMPLETED'
+                WHEN wc.end_date IS NULL
+                    THEN 'NO_DATE'
+                WHEN wc.end_date < CURRENT_DATE
+                    THEN 'EXPIRED'
+                WHEN (wc.end_date - CURRENT_DATE) <= 30
+                    THEN 'DUE_SOON'
+                ELSE 'ON_TRACK'
+            END AS health_status,
+            CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM work_stage_histories wsh
+                    WHERE wsh.id_work_item = wc.id_work_item
+                      AND wsh.stage = 'BA'
+                      AND wsh.is_active = 1
+                )
+                    THEN NULL
+                WHEN wc.end_date IS NULL
+                    THEN NULL
+                ELSE (wc.end_date - CURRENT_DATE)
+            END AS days_to_end,
             wc.is_active, wc.created_by, wc.created_at, wc.updated_by, wc.updated_at
         FROM work_contracts wc
         INNER JOIN work_items wi

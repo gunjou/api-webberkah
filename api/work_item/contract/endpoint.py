@@ -73,6 +73,7 @@ contract_update_parser.add_argument("document", type=FileStorage, required=False
 contract_filter_parser = ns.parser()
 contract_filter_parser.add_argument("stage", type=str, required=False, default="ACTIVE", choices=("ACTIVE", "CLOSED"), location="args", help="Filter berdasarkan stage Work Item. ACTIVE untuk semua stage selain CLOSED, CLOSED untuk Work Item yang sudah ditutup.")
 contract_filter_parser.add_argument("status", type=str, required=False, choices=("ACTIVE", "COMPLETED", "CANCELLED"), location="args", help="Filter berdasarkan status contract.")
+contract_filter_parser.add_argument("health_status", type=str, required=False, choices=("COMPLETED", "EXPIRED", "DUE_SOON", "ON_TRACK", "NO_DATE"), location="args", help="Filter berdasarkan kondisi kesehatan contract.")
 contract_filter_parser.add_argument("search", type=str, required=False, location="args", help="Search by contract number, work number, work name, or client name.")
 contract_filter_parser.add_argument("id_work_item", type=int, required=False, location="args", help="Filter by work item ID.")
 contract_filter_parser.add_argument("id_client", type=int, required=False, location="args", help="Filter by client ID.")
