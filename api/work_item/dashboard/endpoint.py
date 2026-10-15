@@ -1,7 +1,7 @@
 from flask_restx import Resource
 
 from api.shared.response import success
-from api.utils.decorator import measure_execution_time
+from api.utils.decorator import measure_execution_time, role_required
 from flask_jwt_extended import jwt_required
 
 from . import ns
@@ -26,7 +26,7 @@ dashboard_activity_parser.add_argument(
 #                       #SECTION - DASHBOARD SUMMARY                          #
 # ============================================================================ #
 
-@ns.route("/summary")
+@ns.route("/admin/summary")
 class DashboardSummaryResource(Resource):
 
     @jwt_required()
@@ -46,7 +46,7 @@ class DashboardSummaryResource(Resource):
 #                       #SECTION - DASHBOARD ACTIVITY                         #
 # ============================================================================ #
 
-@ns.route("/activity")
+@ns.route("/admin/activity")
 class DashboardActivityResource(Resource):
 
     @jwt_required()
@@ -66,4 +66,67 @@ class DashboardActivityResource(Resource):
         return success(
             data=data,
             message="Aktivitas dashboard berhasil diambil"
+        )
+
+
+# ============================================================================ #
+#                    #SECTION - DASHBOARD WORK SUMMARY                         #
+# ============================================================================ #
+
+@ns.route("/summary")
+class DashboardWorkSummaryResource(Resource):
+
+    @jwt_required()
+    @role_required(['dashboard', 'admin'])
+    @measure_execution_time
+    def get(self):
+        """Get Dashboard Work Summary"""
+
+        data = get_dashboard_work_summary_service()
+
+        return success(
+            data=data,
+            message="Data monitoring pekerjaan berhasil diambil"
+        )
+
+
+# ============================================================================ #
+#                    #SECTION - DASHBOARD WARNINGS                             #
+# ============================================================================ #
+
+@ns.route("/warnings")
+class DashboardWarningsResource(Resource):
+
+    @jwt_required()
+    @role_required(['dashboard', 'admin'])
+    @measure_execution_time
+    def get(self):
+        """Get Dashboard Work and Invoice Warnings"""
+
+        data = get_dashboard_warnings_service()
+
+        return success(
+            data=data,
+            message="Data warning pekerjaan dan invoice berhasil diambil"
+        )
+
+
+# ============================================================================ #
+#                    #SECTION - DASHBOARD FINANCIAL SUMMARY                    #
+# ============================================================================ #
+
+@ns.route("/financial-summary")
+class DashboardFinancialSummaryResource(Resource):
+
+    @jwt_required()
+    @role_required(['dashboard', 'admin'])
+    @measure_execution_time
+    def get(self):
+        """Get Dashboard Financial Summary"""
+
+        data = get_dashboard_financial_summary_service()
+
+        return success(
+            data=data,
+            message="Data monitoring keuangan berhasil diambil"
         )

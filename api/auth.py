@@ -1,4 +1,5 @@
 from datetime import timedelta
+import os
 
 from flask_restx import Namespace, Resource, fields
 from flask import request
@@ -14,8 +15,8 @@ from api.query.q_auth import *
 auth_ns = Namespace("auth", description="Authentication & Authorization")
 
 admin_login_model = auth_ns.model("AdminLoginRequest", {
-        "username": fields.String(required=True, description="Username admin", example="cobauser"),
-        "password": fields.String(required=True, description="Password admin", example="12345")
+        "username": fields.String(required=True, description="Username admin", example="admin123"),
+        "password": fields.String(required=True, description="Password admin", example="password123")
     }
 )
 
@@ -28,6 +29,11 @@ pegawai_login_model = auth_ns.model("PegawaiLoginRequest", {
 change_password_model = auth_ns.model("ChangePasswordRequest", {
         "old_password": fields.String(required=True, description="Password lama", example="passwordlama"),
         "new_password": fields.String(required=True, description="Password baru", example="passwordbaru123")
+    }
+)
+
+dashboard_access_model = auth_ns.model("DashboardAccessRequest", {
+        "access_code": fields.String(required=True, description="Kode akses dashboard", example="access-code")
     }
 )
 
@@ -406,4 +412,58 @@ class ChangePasswordResource(Resource):
 
         return success(
             message="Password berhasil diubah"
+        )
+
+
+# ===================================
+# ENDPOINT UNTUK KODE DASHBOARD      
+# ===================================
+@auth_ns.route("/dashboard/access")
+class DashboardAccessResource(Resource):
+
+    @auth_ns.expect(dashboard_access_model, validate=True)
+    @measure_execution_time
+    def post(self):
+        """Akses dashboard menggunakan kode akses"""
+
+        body = request.get_json(silent=True) or {}
+        access_code = body.get("access_code")
+
+        # VALIDASI INPUT
+        if not access_code:
+            raise ValidationError(
+                message="Kode akses wajib diisi",
+                errors={"access_code": "required"}
+            )
+
+        # VALIDASI ACCESS CODE
+        configured_access_code = os.getenv("ACCESS_CODE")
+
+        if not configured_access_code:
+            raise AuthError("Konfigurasi kode akses dashboard belum tersedia")
+
+        if access_code != configured_access_code:
+            raise AuthError("Kode akses dashboard tidak valid")
+
+        # GENERATE JWT
+
+        access_token = create_access_token(
+            identity="dashboard",
+            additional_claims={
+                "account_type": "dashboard",
+                "client": "dashboard"
+            },
+            expires_delta=timedelta(
+                hours=int(
+                    os.getenv("JWT_ACCESS_EXPIRES", 10)
+                )
+            )
+        )
+
+        return success(
+            data={
+                "access_token": access_token,
+                "access_type": "dashboard"
+            },
+            message="Akses dashboard berhasil"
         )

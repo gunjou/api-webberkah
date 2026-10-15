@@ -282,3 +282,79 @@ class DashboardSebaranLokasiHariIniResource(Resource):
                 "total_pegawai": sum(item["total"] for item in result)
             }
         )
+
+
+# ======================================================================
+# ENDPOINT AGREGASI KEHADIRAN PEGAWAI HARI INI (ADMIN/WEBBERKAH)
+# ======================================================================
+@dashboard_ns.route("/kehadiran-hari-ini")
+class DashboardKehadiranHariIniResource(Resource):
+
+    @jwt_required()
+    @role_required(["admin", "dashboard"])
+    @measure_execution_time
+    def get(self):
+        """
+        (admin) Agregasi seluruh data kehadiran pegawai
+        untuk dashboard dalam satu endpoint.
+        """
+
+        # Ambil seluruh data menggunakan query yang sudah tersedia
+        pegawai_aktif = list(
+            get_pegawai_aktif_dashboard()
+        )
+
+        hadir = list(
+            get_presensi_hadir_hari_ini_simple()
+        )
+
+        terlambat = list(
+            get_presensi_terlambat_hari_ini_simple()
+        )
+
+        izin = list(
+            get_pegawai_izin_hari_ini_dashboard()
+        )
+
+        alpha = list(
+            get_pegawai_alpha_hari_ini()
+        )
+
+        # Ringkasan data dashboard
+        summary = {
+            "total_pegawai_aktif": len(pegawai_aktif),
+            "total_hadir": len(hadir),
+            "total_terlambat": len(terlambat),
+            "total_izin": len(izin),
+            "total_alpha": len(alpha),
+        }
+
+        # Ringkasan kategori izin
+        summary_izin = {
+            "SAKIT": 0,
+            "IZIN": 0,
+            "CUTI": 0,
+        }
+
+        for item in izin:
+            kategori = item.get("kategori_izin")
+
+            if kategori in summary_izin:
+                summary_izin[kategori] += 1
+
+        summary["izin_detail"] = summary_izin
+
+        return success(
+            message="Data kehadiran dashboard berhasil diambil",
+            data={
+                "pegawai_aktif": pegawai_aktif,
+                "hadir": hadir,
+                "terlambat": terlambat,
+                "izin": izin,
+                "alpha": alpha,
+            },
+            meta={
+                "tanggal": get_wita().date().isoformat(),
+                "summary": summary,
+            }
+        )

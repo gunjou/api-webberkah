@@ -66,8 +66,11 @@ def get_pegawai_aktif_dashboard():
     sql = text("""
         SELECT
             p.id_pegawai, p.nip, p.nama_lengkap, p.nama_panggilan, d.id_departemen, d.nama_departemen, 
-            sp.id_status_pegawai, sp.nama_status AS status_pegawai
+            sp.id_status_pegawai, sp.nama_status AS status_pegawai, ap.img_path
         FROM pegawai p
+        JOIN auth_pegawai ap 
+            ON p.id_pegawai = ap.id_pegawai 
+            AND ap.status = 1
         LEFT JOIN ref_departemen d
                ON d.id_departemen = p.id_departemen
               AND d.status = 1
@@ -99,7 +102,7 @@ def get_presensi_hadir_hari_ini_simple():
         SELECT
             a.id_absensi, a.tanggal, a.jam_masuk   AS jam_checkin, a.jam_keluar  AS jam_checkout, a.menit_terlambat,
 
-            p.id_pegawai, p.nip, p.nama_lengkap, p.nama_panggilan,
+            p.id_pegawai, p.nip, p.nama_lengkap, p.nama_panggilan, ap.img_path,
 
             d.id_departemen, d.nama_departemen,
 
@@ -109,6 +112,10 @@ def get_presensi_hadir_hari_ini_simple():
         JOIN pegawai p
           ON p.id_pegawai = a.id_pegawai
          AND p.status = 1
+
+         JOIN auth_pegawai ap 
+            ON p.id_pegawai = ap.id_pegawai 
+            AND ap.status = 1
 
         LEFT JOIN ref_departemen d
           ON d.id_departemen = p.id_departemen
@@ -148,9 +155,10 @@ def get_presensi_terlambat_hari_ini_simple():
         SELECT
             a.id_absensi, a.tanggal, a.jam_masuk AS jam_checkin, a.menit_terlambat,
             p.id_pegawai, p.nip, p.nama_lengkap, p.nama_panggilan,
-            d.nama_departemen, sp.nama_status AS status_pegawai
+            d.nama_departemen, sp.nama_status AS status_pegawai, ap.img_path
         FROM absensi a
         JOIN pegawai p ON p.id_pegawai = a.id_pegawai AND p.status = 1
+        JOIN auth_pegawai ap ON p.id_pegawai = ap.id_pegawai AND ap.status = 1
         LEFT JOIN ref_departemen d ON d.id_departemen = p.id_departemen AND d.status = 1
         LEFT JOIN ref_status_pegawai sp ON sp.id_status_pegawai = p.id_status_pegawai AND sp.status = 1
         WHERE a.tanggal = :tanggal
@@ -179,7 +187,7 @@ def get_pegawai_izin_hari_ini_dashboard():
 
     sql = text("""
         SELECT
-            p.id_pegawai, p.nip, p.nama_lengkap, p.nama_panggilan,
+            p.id_pegawai, p.nip, p.nama_lengkap, p.nama_panggilan, ap.img_path,
 
             d.id_departemen, d.nama_departemen,
 
@@ -198,6 +206,10 @@ def get_pegawai_izin_hari_ini_dashboard():
         JOIN pegawai p
           ON p.id_pegawai = i.id_pegawai
          AND p.status = 1
+
+         JOIN auth_pegawai ap 
+            ON p.id_pegawai = ap.id_pegawai 
+            AND ap.status = 1
 
         LEFT JOIN ref_departemen d
           ON d.id_departemen = p.id_departemen
@@ -243,9 +255,13 @@ def get_pegawai_alpha_hari_ini():
 
             d.id_departemen, d.nama_departemen,
 
-            sp.id_status_pegawai, sp.nama_status AS status_pegawai
+            sp.id_status_pegawai, sp.nama_status AS status_pegawai, ap.img_path
 
         FROM pegawai p
+        
+        JOIN auth_pegawai ap 
+            ON p.id_pegawai = ap.id_pegawai 
+            AND ap.status = 1
 
         LEFT JOIN ref_departemen d
                ON d.id_departemen = p.id_departemen
