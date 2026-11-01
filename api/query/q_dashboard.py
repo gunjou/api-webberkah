@@ -19,16 +19,20 @@ def get_dashboard_notifikasi_count():
         SELECT
             (
                 SELECT COUNT(*)
-                FROM izin
-                WHERE status = 1
-                  AND status_approval = 'pending'
+                FROM izin i
+                INNER JOIN pegawai p
+                    ON p.id_pegawai = i.id_pegawai AND p.status = 1
+                WHERE i.status = 1
+                    AND i.status_approval = 'pending'
             ) AS izin_pending,
 
             (
                 SELECT COUNT(*)
-                FROM lembur
-                WHERE status = 1
-                  AND status_approval = 'pending'
+                FROM lembur l
+                INNER JOIN pegawai p
+                    ON p.id_pegawai = l.id_pegawai AND p.status = 1
+                WHERE l.status = 1
+                    AND l.status_approval = 'pending'
             ) AS lembur_pending
     """)
 

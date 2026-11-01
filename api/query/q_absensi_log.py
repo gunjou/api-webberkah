@@ -104,7 +104,7 @@ def get_absensi_log_list(filters: dict, page: int, limit: int):
         FROM absensi_log l
         JOIN pegawai p ON p.id_pegawai = l.id_pegawai
         LEFT JOIN ref_departemen d ON d.id_departemen = p.id_departemen
-        WHERE {where_sql}
+        WHERE {where_sql} AND p.status = 1
         ORDER BY l.created_at DESC, l.id_log DESC
         LIMIT :limit OFFSET :offset
     """)
@@ -112,7 +112,7 @@ def get_absensi_log_list(filters: dict, page: int, limit: int):
         SELECT COUNT(*)
         FROM absensi_log l
         JOIN pegawai p ON p.id_pegawai = l.id_pegawai
-        WHERE {where_sql}
+        WHERE {where_sql} AND p.status = 1
     """)
 
     with engine.connect() as conn:
@@ -149,7 +149,7 @@ def get_absensi_log_ringkasan(filters: dict):
     base = f"""
         FROM absensi_log l
         JOIN pegawai p ON p.id_pegawai = l.id_pegawai
-        WHERE {where_sql}
+        WHERE {where_sql} AND p.status = 1
     """
     sql_per_error = text(f"""
         SELECT l.error_code, l.http_status, COUNT(*) AS jumlah,
