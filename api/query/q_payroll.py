@@ -13,6 +13,9 @@ from api.utils.config import engine
 JOB_STATUS = {}
 ACTIVE_JOB = None
 
+# Telat lebih dari batas ini → T_TRP hari itu dipotong 100%
+BATAS_TELAT_POTONG_TRP = 15  # menit
+
 SPECIAL_PEGAWAI = {2, 4, 9, 13, 29}
 
 def is_pegawai_special(id_pegawai):
@@ -89,19 +92,28 @@ def normalize_komponen(komponen):
         }
     return hasil
 
+# def get_persen_telat(menit):
+#     if menit <= 5:
+#         return Decimal("0")
+#     elif menit <= 15:
+#         return Decimal("0.25")
+#     elif menit <= 30:
+#         return Decimal("0.50")
+#     elif menit <= 45:
+#         return Decimal("0.75")
+#     elif menit <= 60:
+#         return Decimal("0.90")
+#     else:
+#         return Decimal("1.00")
+
 def get_persen_telat(menit):
-    if menit <= 5:
-        return Decimal("0")
-    elif menit <= 15:
-        return Decimal("0.25")
-    elif menit <= 30:
-        return Decimal("0.50")
-    elif menit <= 45:
-        return Decimal("0.75")
-    elif menit <= 60:
-        return Decimal("0.90")
-    else:
+    """
+    - Telat <= 15 menit → tidak dipotong
+    - Telat  > 15 menit → potong 100% tunjangan transport hari itu
+    """
+    if menit > BATAS_TELAT_POTONG_TRP:
         return Decimal("1.00")
+    return Decimal("0")
 
 def hitung_hari_kerja_efektif(start_date, end_date, hari_libur):
     total = 0

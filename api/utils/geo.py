@@ -1,4 +1,4 @@
-from math import radians, sin, cos, sqrt, atan2
+from math import radians, degrees, sin, cos, sqrt, atan2
 
 
 def calculate_distance(lat1, lon1, lat2, lon2):
@@ -20,6 +20,27 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
 
     return 6371000 * c
+
+
+ARAH_MATA_ANGIN = [
+    "utara", "timur laut", "timur", "tenggara",
+    "selatan", "barat daya", "barat", "barat laut"
+]
+
+
+def calculate_bearing(lat1, lon1, lat2, lon2):
+    """
+    Arah (derajat 0-360, 0 = utara, searah jarum jam) dari titik 1 menuju titik 2.
+    """
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+    dlon = lon2 - lon1
+    x = sin(dlon) * cos(lat2)
+    y = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dlon)
+    return (degrees(atan2(x, y)) + 360) % 360
+
+
+def get_arah_mata_angin(bearing):
+    return ARAH_MATA_ANGIN[int((bearing + 22.5) // 45) % 8]
 
 
 def find_valid_lokasi(
@@ -96,6 +117,14 @@ def find_valid_lokasi(
 
             jarak_terdekat = jarak
 
+            # Arah yang harus dituju pegawai: dari posisi pegawai ke titik lokasi
+            bearing = calculate_bearing(
+                latitude,
+                longitude,
+                lokasi["latitude"],
+                lokasi["longitude"]
+            )
+
             lokasi_terdekat = {
                 "id_lokasi": lokasi["id_lokasi"],
                 "nama_lokasi": lokasi["nama_lokasi"],
@@ -104,7 +133,9 @@ def find_valid_lokasi(
                 "jarak_di_luar_radius": round(
                     max(0, jarak - radius_meter),
                     2
-                )
+                ),
+                "arah": get_arah_mata_angin(bearing),
+                "arah_derajat": round(bearing)
             }
 
     # Tidak ada lokasi yang dapat dihitung

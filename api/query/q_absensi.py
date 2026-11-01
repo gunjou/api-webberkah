@@ -191,8 +191,11 @@ def get_istirahat_absensi(id_absensi: int):
     """
     sql = text("""
         SELECT
-            ai.jam_mulai, ai.jam_selesai, ai.durasi_menit, lb.nama_lokasi AS lokasi_balik
+            ai.jam_mulai, ai.jam_selesai, ai.durasi_menit,
+            lm.nama_lokasi AS lokasi_mulai, lb.nama_lokasi AS lokasi_balik
         FROM absensi_istirahat ai
+        LEFT JOIN ref_lokasi_absensi lm
+            ON lm.id_lokasi = ai.id_lokasi_mulai
         LEFT JOIN ref_lokasi_absensi lb
             ON lb.id_lokasi = ai.id_lokasi_balik
         WHERE ai.id_absensi = :id_absensi
@@ -316,13 +319,17 @@ def update_absensi_checkout(id_absensi: int, jam_keluar, id_lokasi_keluar: int, 
 # ==================================================
 
 # FUNGSI ISTIRAHAT MULAI
-def insert_istirahat_mulai(id_absensi: int, jam_mulai):
+def insert_istirahat_mulai(id_absensi: int, jam_mulai, id_lokasi_mulai=None):
+    """
+    id_lokasi_mulai opsional: diisi dari endpoint istirahat-mulai,
+    NULL untuk istirahat otomatis shift 2/3 saat check-in.
+    """
     sql = text("""
         INSERT INTO absensi_istirahat (
-            id_absensi, jam_mulai, status, created_at, updated_at
+            id_absensi, jam_mulai, id_lokasi_mulai, status, created_at, updated_at
         )
         VALUES (
-            :id_absensi, :jam_mulai, 1, :now, :now
+            :id_absensi, :jam_mulai, :id_lokasi_mulai, 1, :now, :now
         )
         RETURNING id_istirahat
     """)
@@ -330,6 +337,7 @@ def insert_istirahat_mulai(id_absensi: int, jam_mulai):
         return conn.execute(sql, {
             "id_absensi": id_absensi,
             "jam_mulai": jam_mulai,
+            "id_lokasi_mulai": id_lokasi_mulai,
             "now": get_wita()
         }).scalar()
 
@@ -352,6 +360,52 @@ def update_istirahat_selesai(id_istirahat: int, jam_selesai, durasi_menit: int, 
             "id_lokasi_balik": id_lokasi_balik,
             "now": get_wita()
         })
+
+# FUNGSI SELESAI ISTIRAHAT (ATOMIC)
+def selesaikan_istirahat(
+    id_istirahat: int, id_absensi: int, jam_selesai, durasi_menit: int, id_lokasi_balik
+) -> bool:
+    """
+    Menutup istirahat dan menambah total_menit_istirahat dalam SATU transaksi.
+    UPDATE hanya mengenai baris yang jam_selesai-nya masih NULL, sehingga
+    request ganda (double tap) tidak menambah total dua kali.
+    Return False jika istirahat sudah ditutup oleh request lain.
+    """
+    sql_istirahat = text("""
+        UPDATE absensi_istirahat
+        SET jam_selesai = :jam_selesai,
+            durasi_menit = :durasi_menit,
+            id_lokasi_balik = :id_lokasi_balik,
+            updated_at = :now
+        WHERE id_istirahat = :id_istirahat
+          AND jam_selesai IS NULL
+          AND status = 1
+    """)
+    sql_total = text("""
+        UPDATE absensi
+        SET total_menit_istirahat =
+            COALESCE(total_menit_istirahat, 0) + :durasi,
+            updated_at = :now
+        WHERE id_absensi = :id_absensi
+    """)
+    now = get_wita()
+    with engine.begin() as conn:
+        result = conn.execute(sql_istirahat, {
+            "id_istirahat": id_istirahat,
+            "jam_selesai": jam_selesai,
+            "durasi_menit": durasi_menit,
+            "id_lokasi_balik": id_lokasi_balik,
+            "now": now
+        })
+        if result.rowcount == 0:
+            return False
+
+        conn.execute(sql_total, {
+            "id_absensi": id_absensi,
+            "durasi": durasi_menit,
+            "now": now
+        })
+    return True
 
 # HELPER HITUNG TOTAL MENIT ISTIRAHAT
 def add_total_menit_istirahat(id_absensi: int, durasi_menit: int):
@@ -430,8 +484,10 @@ def get_pegawai_basic(id_pegawai: int):
 def get_istirahat_absensi(id_absensi: int):
     sql = text("""
         SELECT
-            ai.jam_mulai, ai.jam_selesai, ai.durasi_menit, lb.nama_lokasi AS lokasi_balik
+            ai.jam_mulai, ai.jam_selesai, ai.durasi_menit,
+            lm.nama_lokasi AS lokasi_mulai, lb.nama_lokasi AS lokasi_balik
         FROM absensi_istirahat ai
+        LEFT JOIN ref_lokasi_absensi lm ON lm.id_lokasi = ai.id_lokasi_mulai
         LEFT JOIN ref_lokasi_absensi lb ON lb.id_lokasi = ai.id_lokasi_balik
         WHERE ai.id_absensi = :id_absensi
           AND ai.status = 1

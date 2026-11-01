@@ -52,6 +52,8 @@ CORS(app)
 # JWT CONFIG
 # ==============================
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
+# Matikan saran URL otomatis flask-restx agar pesan 404 tetap bersih
+app.config["ERROR_404_HELP"] = False
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(
     minutes=int(os.getenv("JWT_ACCESS_EXPIRES", 60))
 )
@@ -202,6 +204,7 @@ def handle_app_error_restx(error: AppError):
         "success": False,
         "message": error.message,
         "code": error.status_code,
+        "error_code": error.code,
         "errors": error.errors
     }, error.status_code
 
