@@ -145,6 +145,21 @@ def get_v2_work_monitoring():
 
                 stage_now.stage_started_at,
 
+                -- =========================================================
+                -- NOTES SESUAI STAGE SAAT INI
+                -- =========================================================
+                CASE
+                    WHEN wi.current_stage = 'IDENTIFIED' THEN wi.notes
+                    WHEN wi.current_stage = 'QUOTATION' THEN proposal.notes
+                    WHEN wi.current_stage IN ('CONTRACT', 'IN_PROGRESS', 'COMPLETED')
+                        THEN COALESCE(progress_note.notes, contract.notes)
+                    WHEN wi.current_stage = 'BA' THEN comp.notes
+                    WHEN wi.current_stage = 'INVOICE' THEN invoice_note.notes
+                    WHEN wi.current_stage = 'PAYMENT'
+                        THEN COALESCE(payment_note.notes, invoice_note.notes)
+                    ELSE NULL
+                END AS stage_notes,
+
                 wi.updated_at
 
             FROM work_items wi
@@ -156,7 +171,7 @@ def get_v2_work_monitoring():
                 ON cp.id_client_pic = wi.id_client_pic
 
             LEFT JOIN LATERAL (
-                SELECT wp.proposal_number, wp.valid_until
+                SELECT wp.proposal_number, wp.valid_until, wp.notes
                 FROM work_proposals wp
                 WHERE wp.id_work_item = wi.id_work_item
                     AND wp.is_active = 1
@@ -168,7 +183,8 @@ def get_v2_work_monitoring():
                 SELECT
                     wc.contract_number,
                     wc.start_date AS contract_start_date,
-                    wc.end_date AS contract_end_date
+                    wc.end_date AS contract_end_date,
+                    wc.notes
                 FROM work_contracts wc
                 WHERE wc.id_work_item = wi.id_work_item
                     AND wc.is_active = 1
@@ -193,6 +209,40 @@ def get_v2_work_monitoring():
                 ORDER BY wsh.started_at DESC
                 LIMIT 1
             ) stage_now ON TRUE
+
+            -- Catatan progres terakhir (stage CONTRACT / COMPLETED)
+            LEFT JOIN LATERAL (
+                SELECT wph.notes
+                FROM work_progress_histories wph
+                WHERE wph.id_work_item = wi.id_work_item
+                    AND wph.is_active = 1
+                    AND NULLIF(TRIM(wph.notes), '') IS NOT NULL
+                ORDER BY wph.progress_date DESC NULLS LAST, wph.created_at DESC
+                LIMIT 1
+            ) progress_note ON TRUE
+
+            -- Catatan invoice terakhir (stage INVOICE / PAYMENT)
+            LEFT JOIN LATERAL (
+                SELECT inv.notes
+                FROM work_invoices inv
+                WHERE inv.id_work_item = wi.id_work_item
+                    AND inv.is_active = 1
+                ORDER BY inv.invoice_date DESC NULLS LAST, inv.created_at DESC
+                LIMIT 1
+            ) invoice_note ON TRUE
+
+            -- Catatan pembayaran terakhir (stage PAYMENT)
+            LEFT JOIN LATERAL (
+                SELECT pay.notes
+                FROM work_payments pay
+                INNER JOIN work_invoices inv
+                    ON inv.id_invoice = pay.id_invoice
+                WHERE inv.id_work_item = wi.id_work_item
+                    AND pay.is_active = 1
+                    AND inv.is_active = 1
+                ORDER BY pay.payment_date DESC NULLS LAST, pay.created_at DESC
+                LIMIT 1
+            ) payment_note ON TRUE
 
             WHERE
                 wi.is_active = 1
