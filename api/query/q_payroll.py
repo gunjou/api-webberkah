@@ -414,10 +414,12 @@ def simulate_payroll(id_pegawai, bulan, tahun):
                     total_potongan += potong
 
             # -------------------------
-            # IZIN & SAKIT → POTONG TRP & MKN
+            # IZIN  → POTONG TRP & MKN
+            # SAKIT → POTONG TRP saja (MKN tetap diberikan)
             # -------------------------
             elif status in ("IZIN", "SAKIT"):
-                for kode in ("T_TRP", "T_MKN"):
+                kode_dipotong = ("T_TRP",) if status == "SAKIT" else ("T_TRP", "T_MKN")
+                for kode in kode_dipotong:
                     if kode in nilai_harian:
                         potong = nilai_harian[kode]
                         potongan.append({
