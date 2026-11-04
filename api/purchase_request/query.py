@@ -250,6 +250,30 @@ def get_purchase_request_list(
         )
 
     # ============================================================
+    # SEARCH (nama pemohon, nama pekerjaan, priority, keterangan item)
+    # ============================================================
+
+    search = (filters.get("search") or "").strip()
+
+    if search:
+        sql += """
+            AND (
+                LOWER(p.nama_lengkap) LIKE :search
+                OR LOWER(p.nama_panggilan) LIKE :search
+                OR LOWER(pr.nama_pekerjaan) LIKE :search
+                OR REPLACE(LOWER(pr.priority), '_', ' ') LIKE :search
+                OR EXISTS (
+                    SELECT 1
+                    FROM purchase_request_items pri
+                    WHERE pri.id_request = pr.id_request
+                        AND LOWER(pri.keterangan) LIKE :search
+                )
+            )
+        """
+
+        params["search"] = f"%{search.lower()}%"
+
+    # ============================================================
     # TANGGAL MULAI
     # ============================================================
 
@@ -434,6 +458,30 @@ def get_purchase_request_data_history(id_user: int, account_type: str, filters: 
         params["id_departemen"] = int(
             filters["id_departemen"]
         )
+
+    # ============================================================
+    # SEARCH (nama pemohon, nama pekerjaan, priority, keterangan item)
+    # ============================================================
+
+    search = (filters.get("search") or "").strip()
+
+    if search:
+        base_where += """
+            AND (
+                LOWER(p.nama_lengkap) LIKE :search
+                OR LOWER(p.nama_panggilan) LIKE :search
+                OR LOWER(pr.nama_pekerjaan) LIKE :search
+                OR REPLACE(LOWER(pr.priority), '_', ' ') LIKE :search
+                OR EXISTS (
+                    SELECT 1
+                    FROM purchase_request_items pri
+                    WHERE pri.id_request = pr.id_request
+                        AND LOWER(pri.keterangan) LIKE :search
+                )
+            )
+        """
+
+        params["search"] = f"%{search.lower()}%"
 
     # =========================================================
     # FILTER TANGGAL

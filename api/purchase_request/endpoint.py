@@ -149,6 +149,7 @@ purchase_request_filter_parser.add_argument(
     )
 )
 purchase_request_filter_parser.add_argument("id_departemen", type=int, required=False, location="args", help="Department ID")
+purchase_request_filter_parser.add_argument("search", type=str, required=False, location="args", help="Search nama pemohon, nama pekerjaan, keterangan")
 purchase_request_filter_parser.add_argument("tanggal_mulai", type=str, required=False, location="args", help="Start Date (YYYY-MM-DD)")
 purchase_request_filter_parser.add_argument("tanggal_selesai", type=str, required=False, location="args", help="End Date (YYYY-MM-DD)")
 
@@ -156,6 +157,7 @@ purchase_request_filter_parser.add_argument("tanggal_selesai", type=str, require
 purchase_request_history_parser = ns.parser()
 purchase_request_history_parser.add_argument("status", required=False, default="PAID", choices=("PAID", "REJECTED"), location="args", help="History Status")
 purchase_request_history_parser.add_argument("id_departemen", required=False, location="args", help="Department ID")
+purchase_request_history_parser.add_argument("search", required=False, location="args", help="Search nama pemohon, nama pekerjaan, keterangan")
 purchase_request_history_parser.add_argument("tanggal_mulai", required=False, location="args", help="Start Date (YYYY-MM-DD)")
 purchase_request_history_parser.add_argument("tanggal_selesai", required=False, location="args", help="End Date (YYYY-MM-DD)")
 purchase_request_history_parser.add_argument("page", required=False, default=1, location="args", help="Page number")
