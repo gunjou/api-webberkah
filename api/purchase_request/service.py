@@ -826,7 +826,15 @@ def generate_purchase_request_pdf_service(
     )
 
     # =================================================
-    # 4. GENERATE PDF
+    # 4. GET BUKTI TRANSAKSI
+    # =================================================
+
+    bukti_transaksi_urls = get_purchase_request_pdf_bukti_transaksi(
+        id_request=id_request
+    )
+
+    # =================================================
+    # 5. GENERATE PDF
     # =================================================
 
     # Hasil query berupa RowMapping (read-only), jadi disalin ke dict dulu.
@@ -839,11 +847,12 @@ def generate_purchase_request_pdf_service(
     pdf = generate_purchase_request_pdf_with_attachment(
         purchase_request=purchase_request,
         items=items,
-        history=history
+        history=history,
+        bukti_transaksi_urls=bukti_transaksi_urls
     )
 
     # =================================================
-    # 5. PREPARE FILENAME
+    # 6. PREPARE FILENAME
     # =================================================
 
     nama_pegawai = _safe_filename(
@@ -865,7 +874,7 @@ def generate_purchase_request_pdf_service(
     )
 
     # =================================================
-    # 6. RETURN
+    # 7. RETURN
     # =================================================
 
     return {

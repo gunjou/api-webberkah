@@ -908,90 +908,24 @@ def _merge_pdf_attachment(
         writer.add_page(page)
 
 
-def generate_purchase_request_pdf_with_attachment(
-    purchase_request,
-    items,
-    history
-):
+def _append_attachment(writer, attachment_url):
     """
-    Generate Purchase Request PDF beserta attachment.
+    Download satu attachment lalu menambahkannya ke writer.
 
-    Behaviour:
-
-    - Tidak ada attachment
-        → hanya PDF utama.
-
-    - Image attachment
-        → image dikonversi menjadi satu halaman A4
-          dengan title LAMPIRAN.
-
-    - PDF attachment
-        → seluruh halaman PDF langsung di-merge.
-
-    Attachment selalu berada setelah seluruh
-    halaman PDF utama.
+    - PDF   : seluruh halaman langsung di-merge.
+    - Image : dikonversi menjadi satu halaman A4 dengan title LAMPIRAN.
     """
-
-    # =================================================
-    # 1. GENERATE MAIN PDF
-    # =================================================
-
-    main_pdf = generate_purchase_request_pdf(
-        purchase_request=purchase_request,
-        items=items,
-        history=history
-    )
-
-    # =================================================
-    # 2. CHECK ATTACHMENT
-    # =================================================
-
-    attachment_path = purchase_request.get(
-        "attachment_path"
-    )
-
-    if not attachment_path:
-        return main_pdf
-
-    # =================================================
-    # 3. DOWNLOAD ATTACHMENT
-    # =================================================
 
     attachment_buffer = _download_attachment(
-        attachment_path
+        attachment_url
     )
 
     if not attachment_buffer:
-        return main_pdf
-
-    # =================================================
-    # 4. CREATE PDF WRITER
-    # =================================================
-
-    writer = PdfWriter()
-
-    # =================================================
-    # 5. ADD MAIN PDF
-    # =================================================
-
-    main_reader = PdfReader(
-        main_pdf
-    )
-
-    for page in main_reader.pages:
-        writer.add_page(page)
-
-    # =================================================
-    # 6. GET EXTENSION
-    # =================================================
+        return
 
     extension = _get_attachment_extension(
-        attachment_path
+        attachment_url
     )
-
-    # =================================================
-    # 7. PDF ATTACHMENT
-    # =================================================
 
     if extension in PDF_EXTENSIONS:
 
@@ -1001,10 +935,6 @@ def generate_purchase_request_pdf_with_attachment(
                 attachment_buffer
             )
         )
-
-    # =================================================
-    # 8. IMAGE ATTACHMENT
-    # =================================================
 
     elif extension in IMAGE_EXTENSIONS:
 
@@ -1018,17 +948,83 @@ def generate_purchase_request_pdf_with_attachment(
                 attachment_pdf=image_pdf
             )
 
-    # =================================================
-    # 9. UNSUPPORTED FORMAT
-    # =================================================
-
     else:
         raise ValueError(
             f"Format attachment tidak didukung: {extension}"
         )
 
+
+def generate_purchase_request_pdf_with_attachment(
+    purchase_request,
+    items,
+    history,
+    bukti_transaksi_urls=None
+):
+    """
+    Generate Purchase Request PDF beserta attachment.
+
+    Urutan halaman:
+
+    1. PDF utama.
+    2. Lampiran purchase request (jika ada).
+    3. Bukti transaksi (jika ada).
+
+    Tanpa lampiran dan bukti transaksi, hanya PDF utama yang dikembalikan.
+    """
+
     # =================================================
-    # 10. FINAL PDF
+    # 1. GENERATE MAIN PDF
+    # =================================================
+
+    main_pdf = generate_purchase_request_pdf(
+        purchase_request=purchase_request,
+        items=items,
+        history=history
+    )
+
+    # =================================================
+    # 2. COLLECT ATTACHMENTS
+    # =================================================
+
+    attachment_urls = [
+        purchase_request.get("attachment_path"),
+        *(bukti_transaksi_urls or []),
+    ]
+
+    attachment_urls = [
+        url
+        for url in attachment_urls
+        if url
+    ]
+
+    if not attachment_urls:
+        return main_pdf
+
+    # =================================================
+    # 3. ADD MAIN PDF
+    # =================================================
+
+    writer = PdfWriter()
+
+    main_reader = PdfReader(
+        main_pdf
+    )
+
+    for page in main_reader.pages:
+        writer.add_page(page)
+
+    # =================================================
+    # 4. ADD ATTACHMENTS
+    # =================================================
+
+    for attachment_url in attachment_urls:
+        _append_attachment(
+            writer=writer,
+            attachment_url=attachment_url
+        )
+
+    # =================================================
+    # 5. FINAL PDF
     # =================================================
 
     output = BytesIO()

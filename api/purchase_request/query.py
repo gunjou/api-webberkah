@@ -1252,6 +1252,49 @@ def get_purchase_request_pdf(id_request: int, id_pegawai: int = None):
         ).mappings().first()
 
 
+def get_purchase_request_pdf_bukti_transaksi(id_request: int):
+    """
+    Mengambil URL bukti transaksi milik purchase request.
+
+    Satu request bisa memiliki beberapa transaksi dengan file yang sama,
+    sehingga URL dibuat unik agar file tidak terlampir dua kali.
+    """
+
+    sql = text("""
+        SELECT
+            t.attachment_url
+        FROM purchase_requests pr
+
+        INNER JOIN transactions t
+            ON t.id_request = pr.id_request
+            AND t.is_active = 1
+
+        WHERE
+            pr.id_request = :id_request
+            AND pr.is_active = 1
+            AND NULLIF(TRIM(t.attachment_url), '') IS NOT NULL
+
+        GROUP BY
+            t.attachment_url
+
+        ORDER BY
+            MIN(t.id_transaction) ASC
+    """)
+
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sql,
+            {
+                "id_request": id_request
+            }
+        ).mappings().all()
+
+    return [
+        row["attachment_url"]
+        for row in rows
+    ]
+
+
 def get_purchase_request_pdf_items(id_request: int):
 
     sql = text("""
