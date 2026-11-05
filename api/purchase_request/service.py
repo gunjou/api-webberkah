@@ -829,6 +829,13 @@ def generate_purchase_request_pdf_service(
     # 4. GENERATE PDF
     # =================================================
 
+    # Hasil query berupa RowMapping (read-only), jadi disalin ke dict dulu.
+    # Label PDF memakai 'TOP URGENT', sedangkan nilai di database 'TOP_URGENT'.
+    purchase_request = dict(purchase_request)
+
+    if purchase_request.get("priority") == "TOP_URGENT":
+        purchase_request["priority"] = "TOP URGENT"
+
     pdf = generate_purchase_request_pdf_with_attachment(
         purchase_request=purchase_request,
         items=items,
