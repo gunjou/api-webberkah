@@ -19,6 +19,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
     SimpleDocTemplate,
     Paragraph,
+    PageBreak,
     Spacer,
     Table,
     TableStyle,
@@ -670,6 +671,11 @@ PDF_EXTENSIONS = {
     ".pdf",
 }
 
+ATTACHMENT_IMAGES_PER_PAGE = 4
+ATTACHMENT_GRID_WIDTH = A4[0] - 2 * MARGIN_X - 12
+ATTACHMENT_GRID_HEIGHT = 190 * mm
+ATTACHMENT_GRID_GAP = 5 * mm
+
 
 def _get_attachment_extension(url):
     """
@@ -713,7 +719,7 @@ def _download_attachment(url):
         )
 
 
-def _image_to_flowable(image_bytes):
+def _image_to_flowable(image_bytes, max_width=130 * mm, max_height=175 * mm):
     """
     Mengubah image bytes menjadi ReportLab Image.
 
@@ -739,9 +745,6 @@ def _image_to_flowable(image_bytes):
     #
     # Kita beri sedikit ruang agar gambar
     # tidak terlalu mepet dengan title.
-
-    max_width = 130 * mm
-    max_height = 175 * mm
 
     ratio = min(
         max_width / image_width,
@@ -786,9 +789,95 @@ def _draw_attachment_footer(canvas, doc):
     )
 
 
+def _attachment_image_grid(image_bytes_list):
+    """
+    Memilih susunan kolom yang menampilkan gambar paling besar.
+    Return: (jumlah kolom, lebar sel, tinggi sel).
+    """
+
+    sizes = [
+        ImageReader(BytesIO(image_bytes)).getSize()
+        for image_bytes in image_bytes_list
+    ]
+
+    best = None
+
+    for columns in range(1, len(sizes) + 1):
+        rows = -(-len(sizes) // columns)
+        cell_width = min(
+            (ATTACHMENT_GRID_WIDTH - ATTACHMENT_GRID_GAP * (columns - 1)) / columns,
+            130 * mm
+        )
+        cell_height = min(
+            (ATTACHMENT_GRID_HEIGHT - ATTACHMENT_GRID_GAP * (rows - 1)) / rows,
+            175 * mm
+        )
+
+        area = sum(
+            width * height * min(cell_width / width, cell_height / height, 1) ** 2
+            for width, height in sizes
+        )
+
+        if best is None or area > best[0]:
+            best = (area, columns, cell_width, cell_height)
+
+    return best[1:]
+
+
+def _attachment_image_block(image_bytes_list):
+    """
+    Satu gambar tampil seperti biasa; beberapa gambar disusun dalam grid.
+    """
+
+    if len(image_bytes_list) == 1:
+        return _image_to_flowable(image_bytes_list[0])
+
+    columns, cell_width, cell_height = _attachment_image_grid(image_bytes_list)
+
+    cells = [
+        _image_to_flowable(
+            image_bytes,
+            max_width=cell_width,
+            max_height=cell_height
+        )
+        for image_bytes in image_bytes_list
+    ]
+
+    rows = [
+        cells[index:index + columns]
+        for index in range(0, len(cells), columns)
+    ]
+    rows[-1] += [""] * (columns - len(rows[-1]))
+
+    table = Table(
+        rows,
+        colWidths=[cell_width + ATTACHMENT_GRID_GAP] * columns,
+        rowHeights=[cell_height + ATTACHMENT_GRID_GAP] * len(rows),
+    )
+    table.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+
+    return table
+
+
 def _image_to_pdf(image_bytes):
     """
     Mengubah satu gambar menjadi PDF satu halaman A4.
+    """
+
+    return images_to_pdf([image_bytes])
+
+
+def images_to_pdf(image_bytes_list):
+    """
+    Mengubah gambar menjadi PDF A4 berformat lampiran.
+    Setiap halaman memuat maksimal ATTACHMENT_IMAGES_PER_PAGE gambar.
 
     Layout:
 
@@ -804,11 +893,7 @@ def _image_to_pdf(image_bytes):
     Halaman X
     """
 
-    image = _image_to_flowable(
-        image_bytes
-    )
-
-    if image is None:
+    if not image_bytes_list:
         return None
 
     output = BytesIO()
@@ -840,24 +925,21 @@ def _image_to_pdf(image_bytes):
         spaceAfter=12,
     )
 
-    story = [
-        Spacer(
-            1,
-            2 * mm
-        ),
+    story = []
 
-        Paragraph(
-            "LAMPIRAN",
-            attachment_title
-        ),
+    for start in range(0, len(image_bytes_list), ATTACHMENT_IMAGES_PER_PAGE):
 
-        Spacer(
-            1,
-            8 * mm
-        ),
+        if start:
+            story.append(PageBreak())
 
-        image,
-    ]
+        story += [
+            Spacer(1, 2 * mm),
+            Paragraph("LAMPIRAN", attachment_title),
+            Spacer(1, 8 * mm),
+            _attachment_image_block(
+                image_bytes_list[start:start + ATTACHMENT_IMAGES_PER_PAGE]
+            ),
+        ]
 
     doc.build(
         story,

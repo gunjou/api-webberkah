@@ -5,12 +5,14 @@ import json
 from flask import request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required, get_jwt
 from flask_restx import Resource, fields
+from werkzeug.datastructures import FileStorage
 
 from api.shared.response import success
 from api.shared.exceptions import ValidationError
 from api.utils.decorator import measure_execution_time
 
 from . import ns
+from .attachment import upload_purchase_request_attachments
 from .service import *
 
 
@@ -167,6 +169,38 @@ purchase_request_history_parser.add_argument("per_page", required=False, default
 # ============================================================================ #
 #                 #SECTION - PURCHASE REQUEST OPERATION                        #
 # ============================================================================ #
+
+# ======================= #ANCHOR - UPLOAD ATTACHMENT ======================= #
+
+purchase_request_attachment_parser = ns.parser()
+purchase_request_attachment_parser.add_argument(
+    "files",
+    type=FileStorage,
+    location="files",
+    action="append",
+    required=True,
+    help="File PDF/JPG/PNG, ulangi field files untuk lebih dari 1 file"
+)
+
+
+@ns.route("/attachments")
+class PurchaseRequestAttachmentResource(Resource):
+
+    @jwt_required()
+    @ns.expect(purchase_request_attachment_parser)
+    @measure_execution_time
+    def post(self):
+        """Upload lampiran dan satukan menjadi 1 file"""
+
+        data = upload_purchase_request_attachments(
+            request.files.getlist("files")
+        )
+
+        return success(
+            data=data,
+            message="Lampiran berhasil diupload."
+        )
+
 
 # ======================= #ANCHOR - CREATE PURCHASE REQUEST ================= #
 
