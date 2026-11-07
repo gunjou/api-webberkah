@@ -31,6 +31,9 @@ payment_create_parser.add_argument("amount", type=float, required=True, location
 payment_create_parser.add_argument("notes", type=str, required=False, location="form", help="Catatan pembayaran")
 payment_create_parser.add_argument("document", type=FileStorage, required=False, location="files", help="Dokumen bukti pembayaran")
 
+payment_document_parser = ns.parser()
+payment_document_parser.add_argument("document", type=FileStorage, required=True, location="files", help="Dokumen bukti pembayaran")
+
 # ================================= PAYMENT RESOURCE =============================== #
 
 @ns.route("")
@@ -64,6 +67,31 @@ class PaymentResource(Resource):
         return success(
             data=data,
             message="Pembayaran berhasil ditambahkan"
+        )
+
+
+# =============================== PAYMENT DOCUMENT ================================ #
+
+@ns.route("/<int:id_payment>/document")
+class PaymentDocumentResource(Resource):
+
+    @jwt_required()
+    @ns.expect(payment_document_parser)
+    @measure_execution_time
+    def patch(self, id_payment):
+        """Tambah Lampiran Work Item Payment"""
+
+        args = payment_document_parser.parse_args()
+
+        data = add_payment_document_service(
+            id_payment=id_payment,
+            document=args.get("document"),
+            updated_by=get_jwt().get("display_name")
+        )
+
+        return success(
+            data=data,
+            message="Lampiran pembayaran berhasil ditambahkan"
         )
 
 

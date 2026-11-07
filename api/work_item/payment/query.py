@@ -204,6 +204,36 @@ def get_payment_detail(id_payment):
     return dict(result) if result else None
 
 
+# =========================== UPDATE PAYMENT DOCUMENT =========================== #
+
+def update_payment_document(id_payment, document_url, updated_by):
+
+    query = text("""
+        UPDATE work_payments
+        SET
+            document_url = :document_url,
+            updated_by = :updated_by,
+            updated_at = :updated_at
+        WHERE id_payment = :id_payment
+          AND is_active = 1
+          AND (document_url IS NULL OR document_url = '')
+    """)
+
+    with engine.begin() as conn:
+
+        result = conn.execute(
+            query,
+            {
+                "id_payment": id_payment,
+                "document_url": document_url,
+                "updated_by": updated_by,
+                "updated_at": get_wita()
+            }
+        )
+
+    return result.rowcount > 0
+
+
 # ============================== DELETE PAYMENT ================================ #
 
 def delete_payment(id_payment, updated_by):

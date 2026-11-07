@@ -52,6 +52,29 @@ def get_payment_detail_service(id_payment):
     return data
 
 
+def add_payment_document_service(id_payment, document, updated_by):
+
+    # Cek sebelum upload agar tidak meninggalkan file yatim di CDN
+    payment = get_payment_detail_service(id_payment=id_payment)
+
+    if payment["document_url"]:
+        raise ValidationError("Pembayaran sudah memiliki lampiran")
+
+    document_url = upload_work_item_document(
+        document=document,
+        category="payment"
+    )
+
+    if not update_payment_document(
+        id_payment=id_payment,
+        document_url=document_url,
+        updated_by=updated_by
+    ):
+        raise ValidationError("Pembayaran sudah memiliki lampiran")
+
+    return get_payment_detail_service(id_payment=id_payment)
+
+
 def delete_payment_service(id_payment, updated_by):
 
     result = delete_payment(
