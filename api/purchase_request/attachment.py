@@ -177,7 +177,7 @@ def combine_attachments(files):
     return content, f"{base_name}.pdf", PDF_MIMETYPE
 
 
-def upload_purchase_request_attachments(files):
+def upload_purchase_request_attachments(files, category=CDN_CATEGORY):
     """
     Memproses file lalu mengupload satu hasilnya ke CDN.
     Return: attachment_name dan attachment_path untuk body create/update.
@@ -199,7 +199,7 @@ def upload_purchase_request_attachments(files):
             filename=filename,
             content_type=mimetype,
         ),
-        category=CDN_CATEGORY,
+        category=category,
     )
 
     return {

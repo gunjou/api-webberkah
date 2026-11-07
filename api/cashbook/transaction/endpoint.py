@@ -1,11 +1,13 @@
 from flask import request
 from flask_jwt_extended import jwt_required, get_jwt
 from flask_restx import Resource, fields
+from werkzeug.datastructures import FileStorage
 
 from api.shared.response import success
 from api.shared.exceptions import ValidationError, NotFoundError
 from api.utils.decorator import measure_execution_time
 from api.security.cashbook import cashbook_role_required
+from api.purchase_request.attachment import upload_purchase_request_attachments
 
 from . import ns
 from .service import *
@@ -130,6 +132,37 @@ class TransactionListResource(Resource):
             data=data,
             message="Transaction created"
         )
+
+
+# ========================= #ANCHOR - UPLOAD ATTACHMENT ====================== #
+
+transaction_attachment_parser = ns.parser()
+transaction_attachment_parser.add_argument(
+    "files",
+    type=FileStorage,
+    location="files",
+    action="append",
+    required=True,
+    help="File PDF/JPG/PNG/WEBP, ulangi field files untuk lebih dari 1 file"
+)
+
+
+@ns.route("/attachments")
+class TransactionAttachmentResource(Resource):
+
+    @jwt_required()
+    @cashbook_role_required()
+    @ns.expect(transaction_attachment_parser)
+    @measure_execution_time
+    def post(self):
+        """Gabungkan bukti transaksi menjadi 1 PDF lalu upload ke CDN"""
+
+        data = upload_purchase_request_attachments(
+            request.files.getlist("files"),
+            category="pengajuan"
+        )
+
+        return success(data=data, message="Lampiran berhasil diupload.")
 
 
 # ===================== #ANCHOR - DETAIL | UPDATE | DELETE =================== #
