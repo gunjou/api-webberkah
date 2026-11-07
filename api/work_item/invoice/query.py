@@ -819,7 +819,23 @@ def get_invoice_detail(id_invoice):
             wc.ba_number,
             wc.ba_date,
             wc.completion_date,
-            wc.document_url AS ba_document_url,
+            (
+                SELECT COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'id_attachment', a.id_attachment,
+                            'file_name', a.file_name,
+                            'file_url', a.file_url
+                        )
+                        ORDER BY a.id_attachment
+                    ),
+                    '[]'::json
+                )
+                FROM attachments a
+                WHERE a.module = 'WORK_COMPLETION'
+                  AND a.id_reference = wc.id_completion
+                  AND a.is_active = 1
+            ) AS ba_attachments,
             wc.notes AS ba_notes,
 
             -- ================================= INVOICE ============================== #

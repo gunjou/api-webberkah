@@ -19,7 +19,6 @@ completion_create_model = ns.model(
         "ba_number": fields.String(required=True, description="BA Number"),
         "ba_date": fields.Date(required=True, description="BA Date"),
         "completion_date": fields.Date(required=False, description="Completion Date"),
-        "document_url": fields.String(required=False, description="BA Document URL"),
         "notes": fields.String(required=False, description="Notes")
     }
 )
@@ -31,7 +30,6 @@ completion_edit_model = ns.model(
         "ba_number": fields.String(required=True, description="Nomor BA"),
         "ba_date": fields.Date(required=True, description="Tanggal BA"),
         "completion_date": fields.Date(required=False, description="Tanggal penyelesaian pekerjaan"),
-        "document_url": fields.String(required=False, description="URL dokumen BA"),
         "notes": fields.String(required=False, description="Catatan")
     }
 )
@@ -43,7 +41,7 @@ completion_create_parser = ns.parser()
 completion_create_parser.add_argument("id_work_item", type=int, required=True, location="form", help="Work Item ID")
 completion_create_parser.add_argument("ba_number", type=str, required=True, location="form", help="BA Number")
 completion_create_parser.add_argument("ba_date", type=str, required=False, location="form", help="BA Date: YYYY-MM-DD")
-completion_create_parser.add_argument("document", type=FileStorage, required=False, location="files", help="BA Document")
+completion_create_parser.add_argument("document", type=FileStorage, required=False, location="files", action="append", help="BA Documents")
 completion_create_parser.add_argument("notes", type=str, required=False, location="form", help="Notes")
 
 completion_edit_parser = ns.parser()
@@ -51,7 +49,7 @@ completion_edit_parser.add_argument("id_work_item", type=int, required=True, loc
 completion_edit_parser.add_argument("ba_number", type=str, required=True, location="form", help="BA Number")
 completion_edit_parser.add_argument("ba_date", type=str, required=True, location="form", help="BA Date: YYYY-MM-DD")
 completion_edit_parser.add_argument("notes", type=str, required=False, location="form", help="Notes")
-completion_edit_parser.add_argument("document", type=FileStorage, required=False, location="files", help="BA Document")
+completion_edit_parser.add_argument("document", type=FileStorage, required=False, location="files", action="append", help="BA Documents (ditambahkan ke lampiran yang ada)")
 
 completion_filter_parser = ns.parser()
 completion_filter_parser.add_argument("stage", type=str, required=False, default="ACTIVE", choices=("ACTIVE", "CLOSED"), location="args", help="Filter berdasarkan stage Work Item. ACTIVE untuk semua stage selain CLOSED, CLOSED untuk Work Item yang sudah ditutup.")
@@ -101,14 +99,14 @@ class CompletionListResource(Resource):
             "notes": args.get("notes"),
         }
 
-        document = args.get("document")
+        documents = args.get("document")
 
         created_by = get_jwt().get("display_name")
 
         data = create_completion_service(
             body=body,
             created_by=created_by,
-            document=document
+            documents=documents
         )
 
         return success(
@@ -148,7 +146,7 @@ class CompletionDetailResource(Resource):
             "notes": args.get("notes"),
         }
 
-        document = args.get("document")
+        documents = args.get("document")
 
         updated_by = get_jwt().get("display_name")
 
@@ -156,7 +154,7 @@ class CompletionDetailResource(Resource):
             id_completion=id_completion,
             data=data,
             updated_by=updated_by,
-            document=document
+            documents=documents
         )
 
         return success(
@@ -180,6 +178,26 @@ class CompletionDetailResource(Resource):
         return success(
             data=None,
             message="BA berhasil dihapus"
+        )
+
+
+@ns.route("/<int:id_completion>/attachments/<int:id_attachment>")
+class CompletionAttachmentResource(Resource):
+
+    @jwt_required()
+    @measure_execution_time
+    def delete(self, id_completion, id_attachment):
+        """Hapus Lampiran Work Item Completion / BA"""
+
+        delete_completion_attachment_service(
+            id_completion=id_completion,
+            id_attachment=id_attachment,
+            updated_by=get_jwt().get("display_name")
+        )
+
+        return success(
+            data=None,
+            message="Lampiran BA berhasil dihapus"
         )
 
 

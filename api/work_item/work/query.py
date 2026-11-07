@@ -451,12 +451,29 @@ def get_work_item_detail(id_work_item):
 
     sql_completion = text("""
         SELECT
-            id_completion, id_work_item, ba_number, ba_date, completion_date, document_url, notes, 
-            created_by, created_at, updated_by, updated_at
-        FROM work_completions
+            wc.id_completion, wc.id_work_item, wc.ba_number, wc.ba_date, wc.completion_date, wc.notes, 
+            wc.created_by, wc.created_at, wc.updated_by, wc.updated_at,
+            (
+                SELECT COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'id_attachment', a.id_attachment,
+                            'file_name', a.file_name,
+                            'file_url', a.file_url
+                        )
+                        ORDER BY a.id_attachment
+                    ),
+                    '[]'::json
+                )
+                FROM attachments a
+                WHERE a.module = 'WORK_COMPLETION'
+                  AND a.id_reference = wc.id_completion
+                  AND a.is_active = 1
+            ) AS attachments
+        FROM work_completions wc
         WHERE
-            id_work_item = :id_work_item
-            AND is_active = 1
+            wc.id_work_item = :id_work_item
+            AND wc.is_active = 1
         LIMIT 1
     """)
 

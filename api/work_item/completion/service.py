@@ -7,6 +7,30 @@ from .query import *
 #                           #SECTION - COMPLETION (BA)                         #
 # ============================================================================ #
 
+def upload_completion_documents(documents):
+
+    documents = [
+        document for document in (documents or [])
+        if document and document.filename and document.filename.strip()
+    ]
+
+    for document in documents:
+        if len(document.filename.strip()) > 255:
+            raise ValidationError("Nama file dokumen maksimal 255 karakter")
+
+    attachments = []
+
+    for document in documents:
+        file_name = document.filename.strip()
+
+        attachments.append({
+            "file_name": file_name,
+            "file_url": upload_work_item_document(document, "ba")
+        })
+
+    return attachments
+
+
 def get_completion_list_service(filters):
 
     stage = filters.get("stage", "ACTIVE")
@@ -44,7 +68,7 @@ def get_completion_list_service(filters):
     )
 
 
-def create_completion_service(body, created_by, document=None):
+def create_completion_service(body, created_by, documents=None):
 
     id_work_item = body.get("id_work_item")
 
@@ -103,13 +127,7 @@ def create_completion_service(body, created_by, document=None):
 
     # -------------------------- Upload document ke CDN -------------------------- #
 
-    document_url = None
-
-    if document:
-        document_url = upload_work_item_document(
-            document,
-            "ba"
-        )
+    attachments = upload_completion_documents(documents)
 
     # --------------------------------- Create BA -------------------------------- #
 
@@ -117,7 +135,7 @@ def create_completion_service(body, created_by, document=None):
         id_work_item=id_work_item,
         ba_number=ba_number.strip(),
         ba_date=ba_date,
-        document_url=document_url,
+        attachments=attachments,
         notes=body.get("notes"),
         created_by=created_by
     )
@@ -136,7 +154,7 @@ def get_completion_detail_service(id_completion):
     return completion
 
 
-def update_completion_service(id_completion, data, updated_by, document=None):
+def update_completion_service(id_completion, data, updated_by, documents=None):
 
     if not id_completion:
         raise ValidationError("ID BA wajib diisi")
@@ -191,13 +209,7 @@ def update_completion_service(id_completion, data, updated_by, document=None):
 
     # ----------------------- Upload document baru jika ada ---------------------- #
 
-    document_url = None
-
-    if document:
-        document_url = upload_work_item_document(
-            document,
-            "ba"
-        )
+    attachments = upload_completion_documents(documents)
 
     # --------------------------------- Update BA -------------------------------- #
 
@@ -206,7 +218,7 @@ def update_completion_service(id_completion, data, updated_by, document=None):
         id_work_item=id_work_item,
         ba_number=ba_number.strip(),
         ba_date=ba_date,
-        document_url=document_url,
+        attachments=attachments,
         notes=notes.strip() if notes else None,
         updated_by=updated_by
     )
@@ -241,6 +253,27 @@ def delete_completion_service(id_completion, updated_by):
         id_work_item=id_work_item,
         updated_by=updated_by
     )
+
+
+def delete_completion_attachment_service(id_completion, id_attachment, updated_by):
+
+    completion = get_completion_by_id(id_completion)
+
+    if not completion:
+        raise NotFoundError("BA tidak ditemukan")
+
+    work_item = get_work_item_by_id(completion.get("id_work_item"))
+
+    if not work_item:
+        raise NotFoundError("Work Item tidak ditemukan")
+
+    if work_item.get("current_stage") != "BA":
+        raise ValidationError(
+            "Lampiran BA hanya dapat dihapus ketika Work Item berada pada tahap BA"
+        )
+
+    if not delete_completion_attachment(id_completion, id_attachment, updated_by):
+        raise NotFoundError("Lampiran BA tidak ditemukan")
 
 
 def get_completion_options_service(context=None):

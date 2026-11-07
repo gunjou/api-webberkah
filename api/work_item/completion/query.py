@@ -35,7 +35,7 @@ def get_completion_by_work_item(id_work_item):
 
     query = text("""
         SELECT
-            id_completion, id_work_item, ba_number, ba_date, completion_date, document_url, notes, is_active
+            id_completion, id_work_item, ba_number, ba_date, completion_date, notes, is_active
         FROM work_completions
         WHERE
             id_work_item = :id_work_item
@@ -59,7 +59,7 @@ def get_completion_by_number(ba_number):
 
     query = text("""
         SELECT
-            id_completion, id_work_item, ba_number, ba_date, completion_date, document_url, notes, is_active
+            id_completion, id_work_item, ba_number, ba_date, completion_date, notes, is_active
         FROM work_completions
         WHERE
             ba_number = :ba_number
@@ -82,7 +82,7 @@ def get_completion_by_id(id_completion):
 
     query = text("""
         SELECT
-            id_completion, id_work_item, ba_number, ba_date, completion_date, document_url, notes, is_active
+            id_completion, id_work_item, ba_number, ba_date, completion_date, notes, is_active
         FROM work_completions
         WHERE id_completion = :id_completion
           AND is_active = 1
@@ -98,6 +98,34 @@ def get_completion_by_id(id_completion):
         ).mappings().first()
 
     return dict(result) if result else None
+
+def insert_completion_attachments(conn, id_completion, attachments, created_by, now):
+
+    if not attachments:
+        return
+
+    conn.execute(
+        text("""
+            INSERT INTO attachments (
+                module, id_reference, file_name, file_url, is_active, created_by, created_at, updated_at
+            )
+            VALUES (
+                'WORK_COMPLETION', :id_reference, :file_name, :file_url, 1, :created_by, :created_at, :updated_at
+            )
+        """),
+        [
+            {
+                "id_reference": id_completion,
+                "file_name": attachment["file_name"],
+                "file_url": attachment["file_url"],
+                "created_by": created_by,
+                "created_at": now,
+                "updated_at": now
+            }
+            for attachment in attachments
+        ]
+    )
+
 
 # ============================================================================ #
 #                           #SECTION - COMPLETION (BA)                         #
@@ -195,8 +223,25 @@ def get_completion_list(stage="ACTIVE", search=None, id_work_item=None, id_clien
         SELECT
             wc.id_completion, wc.id_work_item, wi.work_number, wi.work_name, wi.work_type, wi.current_stage AS stage, 
             wi.id_client, c.code AS client_code, c.name AS client_name, wi.id_client_pic, cp.name AS client_pic_name, 
-            wc.ba_number, wc.ba_date, wc.completion_date, wc.document_url, wc.notes, 
-            wc.created_by, wc.created_at, wc.updated_by, wc.updated_at
+            wc.ba_number, wc.ba_date, wc.completion_date, wc.notes, 
+            wc.created_by, wc.created_at, wc.updated_by, wc.updated_at,
+            (
+                SELECT COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'id_attachment', a.id_attachment,
+                            'file_name', a.file_name,
+                            'file_url', a.file_url
+                        )
+                        ORDER BY a.id_attachment
+                    ),
+                    '[]'::json
+                )
+                FROM attachments a
+                WHERE a.module = 'WORK_COMPLETION'
+                  AND a.id_reference = wc.id_completion
+                  AND a.is_active = 1
+            ) AS attachments
         FROM work_completions wc
         INNER JOIN work_items wi
             ON wi.id_work_item = wc.id_work_item
@@ -249,7 +294,7 @@ def get_completion_list(stage="ACTIVE", search=None, id_work_item=None, id_clien
     return response
 
 
-def create_completion(id_work_item, ba_number, ba_date, document_url, notes, created_by):
+def create_completion(id_work_item, ba_number, ba_date, attachments, notes, created_by):
 
     now = get_wita()
 
@@ -259,10 +304,10 @@ def create_completion(id_work_item, ba_number, ba_date, document_url, notes, cre
 
         insert_query = text("""
             INSERT INTO work_completions (
-                id_work_item, ba_number, ba_date, document_url, notes, is_active, created_by, created_at, updated_at
+                id_work_item, ba_number, ba_date, notes, is_active, created_by, created_at, updated_at
             )
             VALUES (
-                :id_work_item, :ba_number, :ba_date, :document_url, :notes, 1, :created_by, :created_at, :updated_at
+                :id_work_item, :ba_number, :ba_date, :notes, 1, :created_by, :created_at, :updated_at
             )
             RETURNING id_completion
         """)
@@ -273,7 +318,6 @@ def create_completion(id_work_item, ba_number, ba_date, document_url, notes, cre
                 "id_work_item": id_work_item,
                 "ba_number": ba_number,
                 "ba_date": ba_date,
-                "document_url": document_url,
                 "notes": notes,
                 "created_by": created_by,
                 "created_at": now,
@@ -282,6 +326,8 @@ def create_completion(id_work_item, ba_number, ba_date, document_url, notes, cre
         ).mappings().first()
 
         id_completion = result["id_completion"]
+
+        insert_completion_attachments(conn, id_completion, attachments, created_by, now)
 
         # ---------------------- 2. Tutup stage history CONTRACT --------------------- #
 
@@ -361,7 +407,24 @@ def get_completion_detail(id_completion):
             wi.progress_percent, wi.id_client, c.code AS client_code, c.name AS client_name, wi.id_client_pic, 
             cp.name AS client_pic_name, cp.position AS client_pic_position, cp.phone AS client_pic_phone, 
             cp.email AS client_pic_email, wi.internal_pic_name, wc.ba_number, wc.ba_date, wc.completion_date, 
-            wc.document_url, wc.notes, wc.is_active, wc.created_by, wc.created_at, wc.updated_by, wc.updated_at
+            wc.notes, wc.is_active, wc.created_by, wc.created_at, wc.updated_by, wc.updated_at,
+            (
+                SELECT COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'id_attachment', a.id_attachment,
+                            'file_name', a.file_name,
+                            'file_url', a.file_url
+                        )
+                        ORDER BY a.id_attachment
+                    ),
+                    '[]'::json
+                )
+                FROM attachments a
+                WHERE a.module = 'WORK_COMPLETION'
+                  AND a.id_reference = wc.id_completion
+                  AND a.is_active = 1
+            ) AS attachments
         FROM work_completions wc
         INNER JOIN work_items wi
             ON wi.id_work_item = wc.id_work_item
@@ -385,7 +448,7 @@ def get_completion_detail(id_completion):
     return dict(result) if result else None
 
 
-def update_completion(id_completion, id_work_item, ba_number, ba_date, document_url, notes, updated_by):
+def update_completion(id_completion, id_work_item, ba_number, ba_date, attachments, notes, updated_by):
 
     now = get_wita()
 
@@ -395,7 +458,6 @@ def update_completion(id_completion, id_work_item, ba_number, ba_date, document_
             id_work_item = :id_work_item,
             ba_number = :ba_number,
             ba_date = :ba_date,
-            document_url = COALESCE(:document_url, document_url),
             notes = :notes,
             updated_by = :updated_by,
             updated_at = :updated_at
@@ -404,7 +466,7 @@ def update_completion(id_completion, id_work_item, ba_number, ba_date, document_
             AND is_active = 1
 
         RETURNING
-            id_completion, id_work_item, ba_number, ba_date, document_url, notes, updated_by, updated_at
+            id_completion, id_work_item, ba_number, ba_date, notes, updated_by, updated_at
     """)
 
     with engine.begin() as conn:
@@ -416,14 +478,46 @@ def update_completion(id_completion, id_work_item, ba_number, ba_date, document_
                 "id_work_item": id_work_item,
                 "ba_number": ba_number,
                 "ba_date": ba_date,
-                "document_url": document_url,
                 "notes": notes,
                 "updated_by": updated_by,
                 "updated_at": now
             }
         ).mappings().first()
 
+        if result:
+            insert_completion_attachments(conn, id_completion, attachments, updated_by, now)
+
     return dict(result) if result else None
+
+
+def delete_completion_attachment(id_completion, id_attachment, updated_by):
+
+    query = text("""
+        UPDATE attachments
+        SET
+            is_active = 0,
+            updated_by = :updated_by,
+            updated_at = :updated_at
+        WHERE
+            id_attachment = :id_attachment
+            AND module = 'WORK_COMPLETION'
+            AND id_reference = :id_completion
+            AND is_active = 1
+    """)
+
+    with engine.begin() as conn:
+
+        result = conn.execute(
+            query,
+            {
+                "id_attachment": id_attachment,
+                "id_completion": id_completion,
+                "updated_by": updated_by,
+                "updated_at": get_wita()
+            }
+        )
+
+    return result.rowcount > 0
 
 
 def delete_completion(id_completion, id_work_item, updated_by):
