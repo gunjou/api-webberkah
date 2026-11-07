@@ -167,12 +167,12 @@ def get_dashboard_financial():
             SELECT
                 COALESCE(
                     SUM(
-                        winv.invoice_value
+                        ROUND(winv.invoice_value
                         + (
                             winv.invoice_value
                             * COALESCE(winv.vat_rate, 0)
                             / 100
-                        )
+                        ), 0)
                     ),
                     0
                 ) AS invoiced
@@ -243,12 +243,12 @@ def get_dashboard_attention():
                 winv.id_invoice,
 
                 (
-                    winv.invoice_value
+                    ROUND(winv.invoice_value
                     + (
                         winv.invoice_value
                         * COALESCE(winv.vat_rate, 0)
                         / 100
-                    )
+                    ), 0)
                 ) AS total_invoice,
 
                 COALESCE(
@@ -1007,11 +1007,11 @@ def get_dashboard_warnings():
                     inv.due_date,
 
                     (
-                        inv.invoice_value
+                        ROUND(inv.invoice_value
                         + (
                             inv.invoice_value
                             * COALESCE(inv.vat_rate, 0) / 100.0
-                        )
+                        ), 0)
                     ) AS total_invoice,
 
                     COALESCE(
@@ -1027,11 +1027,11 @@ def get_dashboard_warnings():
 
                     GREATEST(
                         (
-                            inv.invoice_value
+                            ROUND(inv.invoice_value
                             + (
                                 inv.invoice_value
                                 * COALESCE(inv.vat_rate, 0) / 100.0
-                            )
+                            ), 0)
                         )
                         -
                         COALESCE(
@@ -1411,13 +1411,10 @@ def get_dashboard_unpaid_invoice_financials():
                 inv.invoice_value,
                 COALESCE(inv.vat_rate, 0) AS vat_rate,
 
-                ROUND(
-                    inv.invoice_value
+                ROUND(inv.invoice_value
                     * (
                         1 + COALESCE(inv.vat_rate, 0) / 100.0
-                    ),
-                    2
-                ) AS total_invoice,
+                    ), 0) AS total_invoice,
 
                 COALESCE(ps.paid_amount, 0) AS paid_amount,
 
@@ -1496,13 +1493,10 @@ def get_dashboard_paid_invoice_financials():
             inv.due_date,
             inv.invoice_value,
             COALESCE(inv.vat_rate, 0) AS vat_rate,
-            ROUND(
-                inv.invoice_value
+            ROUND(inv.invoice_value
                 * (
                     1 + COALESCE(inv.vat_rate, 0) / 100.0
-                ),
-                2
-            ) AS total_invoice,
+                ), 0) AS total_invoice,
             COALESCE(
                 ps.paid_amount,
                 0

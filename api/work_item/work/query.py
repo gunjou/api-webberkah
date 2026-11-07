@@ -819,14 +819,11 @@ def close_work_item(id_work_item, updated_by):
         invoice_query = text("""
             SELECT
                 wi2.id_invoice, wi2.invoice_number, wi2.invoice_value, wi2.vat_rate,
-                ROUND(
-                    wi2.invoice_value +
+                ROUND(wi2.invoice_value +
                     (
                         wi2.invoice_value *
                         COALESCE(wi2.vat_rate, 0) / 100
-                    ),
-                    2
-                ) AS total_invoice
+                    ), 0) AS total_invoice
             FROM work_invoices wi2
             WHERE wi2.id_work_item = :id_work_item
               AND wi2.is_active = 1

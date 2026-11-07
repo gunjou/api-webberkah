@@ -180,12 +180,12 @@ def get_invoice_list(
                     payment_summary.paid_amount,
                     0
                 ) >= (
-                    wi2.invoice_value
+                    ROUND(wi2.invoice_value
                     + (
                         wi2.invoice_value
                         * COALESCE(wi2.vat_rate, 0)
                         / 100
-                    )
+                    ), 0)
                 )
             """)
 
@@ -196,12 +196,12 @@ def get_invoice_list(
                     payment_summary.paid_amount,
                     0
                 ) < (
-                    wi2.invoice_value
+                    ROUND(wi2.invoice_value
                     + (
                         wi2.invoice_value
                         * COALESCE(wi2.vat_rate, 0)
                         / 100
-                    )
+                    ), 0)
                 )
                 AND wi2.due_date < CURRENT_DATE
             """)
@@ -213,12 +213,12 @@ def get_invoice_list(
                     payment_summary.paid_amount,
                     0
                 ) < (
-                    wi2.invoice_value
+                    ROUND(wi2.invoice_value
                     + (
                         wi2.invoice_value
                         * COALESCE(wi2.vat_rate, 0)
                         / 100
-                    )
+                    ), 0)
                 )
                 AND wi2.due_date >= CURRENT_DATE
                 AND (
@@ -233,12 +233,12 @@ def get_invoice_list(
                     payment_summary.paid_amount,
                     0
                 ) < (
-                    wi2.invoice_value
+                    ROUND(wi2.invoice_value
                     + (
                         wi2.invoice_value
                         * COALESCE(wi2.vat_rate, 0)
                         / 100
-                    )
+                    ), 0)
                 )
                 AND wi2.due_date > CURRENT_DATE + 30
             """)
@@ -256,12 +256,12 @@ def get_invoice_list(
                     payment_summary.paid_amount,
                     0
                 ) >= (
-                    wi2.invoice_value
+                    ROUND(wi2.invoice_value
                     + (
                         wi2.invoice_value
                         * COALESCE(wi2.vat_rate, 0)
                         / 100
-                    )
+                    ), 0)
                 )
             """)
 
@@ -272,12 +272,12 @@ def get_invoice_list(
                     payment_summary.paid_amount,
                     0
                 ) < (
-                    wi2.invoice_value
+                    ROUND(wi2.invoice_value
                     + (
                         wi2.invoice_value
                         * COALESCE(wi2.vat_rate, 0)
                         / 100
-                    )
+                    ), 0)
                 )
             """)
 
@@ -365,18 +365,15 @@ def get_invoice_list(
                 wi2.invoice_value
                 * COALESCE(wi2.vat_rate, 0)
                 / 100,
-                2
+                0
             ) AS vat_amount,
 
-            ROUND(
-                wi2.invoice_value
+            ROUND(wi2.invoice_value
                 + (
                     wi2.invoice_value
                     * COALESCE(wi2.vat_rate, 0)
                     / 100
-                ),
-                2
-            ) AS total_invoice,
+                ), 0) AS total_invoice,
 
             wi2.due_date,
             wi2.document_url,
@@ -393,12 +390,12 @@ def get_invoice_list(
 
             GREATEST(
                 (
-                    wi2.invoice_value
+                    ROUND(wi2.invoice_value
                     + (
                         wi2.invoice_value
                         * COALESCE(wi2.vat_rate, 0)
                         / 100
-                    )
+                    ), 0)
                 )
                 - COALESCE(
                     payment_summary.paid_amount,
@@ -418,12 +415,12 @@ def get_invoice_list(
                     payment_summary.paid_amount,
                     0
                 ) < (
-                    wi2.invoice_value
+                    ROUND(wi2.invoice_value
                     + (
                         wi2.invoice_value
                         * COALESCE(wi2.vat_rate, 0)
                         / 100
-                    )
+                    ), 0)
                 )
                     THEN 'SEBAGIAN_DIBAYAR'
 
@@ -437,12 +434,12 @@ def get_invoice_list(
                     payment_summary.paid_amount,
                     0
                 ) >= (
-                    wi2.invoice_value
+                    ROUND(wi2.invoice_value
                     + (
                         wi2.invoice_value
                         * COALESCE(wi2.vat_rate, 0)
                         / 100
-                    )
+                    ), 0)
                 )
                     THEN 'PAID'
 
@@ -462,12 +459,12 @@ def get_invoice_list(
                     payment_summary.paid_amount,
                     0
                 ) >= (
-                    wi2.invoice_value
+                    ROUND(wi2.invoice_value
                     + (
                         wi2.invoice_value
                         * COALESCE(wi2.vat_rate, 0)
                         / 100
-                    )
+                    ), 0)
                 )
                     THEN NULL
 
@@ -836,18 +833,15 @@ def get_invoice_detail(id_invoice):
                 wi2.invoice_value
                 * COALESCE(wi2.vat_rate, 0)
                 / 100,
-                2
+                0
             ) AS vat_amount,
 
-            ROUND(
-                wi2.invoice_value
+            ROUND(wi2.invoice_value
                 + (
                     wi2.invoice_value
                     * COALESCE(wi2.vat_rate, 0)
                     / 100
-                ),
-                2
-            ) AS total_invoice,
+                ), 0) AS total_invoice,
 
             wi2.due_date,
             wi2.document_url AS invoice_document_url,
@@ -862,12 +856,12 @@ def get_invoice_detail(id_invoice):
 
             GREATEST(
                 (
-                    wi2.invoice_value
+                    ROUND(wi2.invoice_value
                     + (
                         wi2.invoice_value
                         * COALESCE(wi2.vat_rate, 0)
                         / 100
-                    )
+                    ), 0)
                 )
                 - COALESCE(payment_summary.paid_amount, 0),
                 0
@@ -879,12 +873,12 @@ def get_invoice_detail(id_invoice):
 
                 WHEN COALESCE(payment_summary.paid_amount, 0)
                      < (
-                        wi2.invoice_value
+                        ROUND(wi2.invoice_value
                         + (
                             wi2.invoice_value
                             * COALESCE(wi2.vat_rate, 0)
                             / 100
-                        )
+                        ), 0)
                      )
                     THEN 'SEBAGIAN_DIBAYAR'
 
@@ -896,12 +890,12 @@ def get_invoice_detail(id_invoice):
             CASE
                 WHEN COALESCE(payment_summary.paid_amount, 0)
                      >= (
-                        wi2.invoice_value
+                        ROUND(wi2.invoice_value
                         + (
                             wi2.invoice_value
                             * COALESCE(wi2.vat_rate, 0)
                             / 100
-                        )
+                        ), 0)
                      )
                     THEN 'PAID'
 
@@ -919,12 +913,12 @@ def get_invoice_detail(id_invoice):
             CASE
                 WHEN COALESCE(payment_summary.paid_amount, 0)
                      >= (
-                        wi2.invoice_value
+                        ROUND(wi2.invoice_value
                         + (
                             wi2.invoice_value
                             * COALESCE(wi2.vat_rate, 0)
                             / 100
-                        )
+                        ), 0)
                      )
                     THEN NULL
 

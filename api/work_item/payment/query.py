@@ -20,15 +20,12 @@ def create_payment(id_invoice, payment_date, amount, document_url, notes, create
                 wi2.id_invoice,
                 wi2.id_work_item,
                 wi.current_stage,
-                ROUND(
-                    wi2.invoice_value
+                ROUND(wi2.invoice_value
                     + (
                         wi2.invoice_value
                         * COALESCE(wi2.vat_rate, 0)
                         / 100
-                    ),
-                    2
-                ) AS total_invoice
+                    ), 0) AS total_invoice
             FROM work_invoices wi2
             INNER JOIN work_items wi
                 ON wi.id_work_item = wi2.id_work_item
@@ -171,17 +168,14 @@ def get_payment_detail(id_payment):
                 wi2.invoice_value
                 * COALESCE(wi2.vat_rate, 0)
                 / 100,
-                2
+                0
             ) AS vat_amount,
-            ROUND(
-                wi2.invoice_value
+            ROUND(wi2.invoice_value
                 + (
                     wi2.invoice_value
                     * COALESCE(wi2.vat_rate, 0)
                     / 100
-                ),
-                2
-            ) AS total_invoice,
+                ), 0) AS total_invoice,
             wi2.due_date, wp.payment_date, wp.amount, wp.document_url, wp.notes, 
             wp.is_active, wp.created_by, wp.created_at, wp.updated_by, wp.updated_at
         FROM work_payments wp

@@ -42,11 +42,8 @@ INVOICE_OUTSTANDING_CTE = """
             inv.invoice_date,
             inv.due_date,
 
-            ROUND(
-                COALESCE(inv.invoice_value, 0)
-                * (1 + COALESCE(inv.vat_rate, 0) / 100.0),
-                2
-            ) AS total_invoice,
+            ROUND(COALESCE(inv.invoice_value, 0)
+                * (1 + COALESCE(inv.vat_rate, 0) / 100.0), 0) AS total_invoice,
 
             COALESCE(ps.paid_amount, 0) AS paid_amount
 
