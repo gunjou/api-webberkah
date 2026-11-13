@@ -457,6 +457,28 @@ class AbsensiHariIniResource(Resource):
 # ==================================================
 # ENDPOINT CHECKIN DAN CHECKOUT PEGAWAI (ABSEN)
 # ==================================================
+cek_lokasi_parser = reqparse.RequestParser()
+cek_lokasi_parser.add_argument("latitude", type=float, location="args", required=True)
+cek_lokasi_parser.add_argument("longitude", type=float, location="args", required=True)
+
+
+@absensi_ns.route("/cek-lokasi")
+class AbsensiCekLokasiResource(Resource):
+
+    @jwt_required()
+    @absensi_ns.expect(cek_lokasi_parser)
+    def get(self):
+        """(pegawai) Cek posisi terhadap radius absensi, tanpa menyimpan apa pun --> absen"""
+        args = cek_lokasi_parser.parse_args()
+        # Di luar radius -> AbsensiError OUTSIDE_RADIUS (422) berisi jarak & arah
+        lokasi = validate_lokasi_absensi(int(get_jwt_identity()), args["latitude"], args["longitude"])
+        return success(data={
+            "nama_lokasi": lokasi["nama_lokasi"],
+            "jarak_meter": round(lokasi["jarak"]) if "jarak" in lokasi else None,
+            "is_wfh": lokasi["is_wfh"],
+        })
+
+
 @absensi_ns.route("/check-in")
 class AbsensiCheckInResource(Resource):
 
