@@ -52,3 +52,27 @@ def upload_work_item_document(document, category):
         raise ValidationError("Document gagal diupload ke CDN.")
 
     return result.get("url")
+
+# ========================== STANDAR NILAI UANG ========================== #
+# Semua nilai uang (kontrak, invoice, pembayaran) disimpan sebagai rupiah bulat.
+# Total + PPN hanya dihitung lewat total_with_vat_sql agar tidak ada dua versi rumus.
+
+def validate_rupiah(value, label):
+
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise ValidationError(f"{label} harus berupa angka")
+
+    if number != int(number):
+        raise ValidationError(f"{label} harus bilangan bulat rupiah (tanpa desimal)")
+
+    return int(number)
+
+
+def total_with_vat_sql(value_col, vat_col):
+
+    return f"ROUND({value_col} + {value_col} * COALESCE({vat_col}, 0) / 100, 0)"
+
+
+assert validate_rupiah("100", "x") == 100 and validate_rupiah(100.0, "x") == 100

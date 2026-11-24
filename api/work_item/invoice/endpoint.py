@@ -15,8 +15,8 @@ from .service import *
 invoice_create_model = ns.model(
     "InvoiceCreate",
     {
-        "id_work_item": fields.Integer(required=True, description="ID Work Item"),
-        "id_completion": fields.Integer(required=False, description="ID BA"),
+        "id_work_item": fields.Integer(required=False, description="Diabaikan: Work Item diambil dari BA"),
+        "id_completion": fields.Integer(required=True, description="ID BA"),
         "invoice_number": fields.String(required=True, description="Nomor Invoice"),
         "invoice_date": fields.Date(required=True, description="Tanggal Invoice"),
         "invoice_value": fields.Float(required=True, description="Nilai Invoice"),
@@ -30,7 +30,7 @@ invoice_create_model = ns.model(
 invoice_edit_model = ns.model(
     "InvoiceEdit",
     {
-        "id_work_item": fields.Integer(required=True, description="ID Work Item"),
+        "id_work_item": fields.Integer(required=False, description="Diabaikan: Work Item diambil dari BA"),
         "id_completion": fields.Integer(required=False, description="ID BA"),
         "invoice_number": fields.String(required=True, description="Nomor Invoice"),
         "invoice_date": fields.Date(required=True, description="Tanggal Invoice"),
@@ -45,8 +45,8 @@ invoice_edit_model = ns.model(
 # ======================= #ANCHOR - FILTER PARSER ============================ #
 
 invoice_create_parser = ns.parser()
-invoice_create_parser.add_argument("id_work_item", type=int, required=True, location="form", help="Work Item ID")
-invoice_create_parser.add_argument("id_completion", type=int, required=False, location="form", help="ID BA")
+invoice_create_parser.add_argument("id_work_item", type=int, required=False, location="form", help="Diabaikan: Work Item diambil dari BA")
+invoice_create_parser.add_argument("id_completion", type=int, required=True, location="form", help="ID BA")
 invoice_create_parser.add_argument("invoice_number", type=str, required=True, location="form", help="Invoice Number")
 invoice_create_parser.add_argument("invoice_date", type=str, required=True, location="form", help="Invoice Date: YYYY-MM-DD")
 invoice_create_parser.add_argument("invoice_value", type=float, required=True, location="form", help="Invoice Value")
@@ -56,7 +56,7 @@ invoice_create_parser.add_argument("notes", type=str, required=False, location="
 invoice_create_parser.add_argument("document", type=FileStorage, required=False, location="files", help="Invoice Document")
 
 invoice_update_parser = ns.parser()
-invoice_update_parser.add_argument("id_work_item", type=int, required=True, location="form", help="Work Item ID")
+invoice_update_parser.add_argument("id_work_item", type=int, required=False, location="form", help="Diabaikan: Work Item tetap dari invoice")
 invoice_update_parser.add_argument("id_completion", type=int, required=False, location="form", help="ID BA")
 invoice_update_parser.add_argument("invoice_number", type=str, required=True, location="form", help="Invoice Number")
 invoice_update_parser.add_argument("invoice_date", type=str, required=True, location="form", help="Invoice Date: YYYY-MM-DD")
@@ -74,6 +74,11 @@ invoice_parser.add_argument( "payment_status", type=str, required=False, locatio
 invoice_parser.add_argument( "search", type=str, required=False, location="args", help="Cari nomor invoice, nomor work item, nama pekerjaan, atau nama client.")
 invoice_parser.add_argument( "page", type=int, required=False, location="args", help="Halaman data. Hanya digunakan ketika stage=CLOSED.")
 invoice_parser.add_argument( "per_page", type=int, required=False, location="args", help="Jumlah data per halaman. Hanya digunakan ketika stage=CLOSED.")
+
+
+billing_summary_parser = ns.parser()
+billing_summary_parser.add_argument("id_completion", type=int, required=True, location="args", help="ID BA")
+billing_summary_parser.add_argument("exclude_id_invoice", type=int, required=False, location="args", help="Isi saat edit invoice agar invoice itu tidak ikut dihitung")
 
 
 # ============================================================================ #
@@ -130,6 +135,28 @@ class InvoiceResource(Resource):
         return success(
             data=data,
             message="Invoice berhasil dibuat"
+        )
+
+
+@ns.route("/billing-summary")
+class InvoiceBillingSummaryResource(Resource):
+
+    @jwt_required()
+    @ns.expect(billing_summary_parser)
+    @measure_execution_time
+    def get(self):
+        """Ringkasan nilai kontrak, total sudah ditagih, dan sugesti nilai termin berikutnya"""
+
+        args = billing_summary_parser.parse_args()
+
+        data = get_billing_summary_service(
+            id_completion=args.get("id_completion"),
+            exclude_id=args.get("exclude_id_invoice")
+        )
+
+        return success(
+            data=data,
+            message="Ringkasan tagihan berhasil diambil"
         )
 
 

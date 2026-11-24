@@ -1,6 +1,7 @@
 from api.shared.exceptions import ValidationError, NotFoundError
-from api.work_item.helper import upload_work_item_document
+from api.work_item.helper import upload_work_item_document, validate_rupiah
 from .query import *
+from api.work_item.invoice.query import get_billing_summary_by_work_item
 
 
 # ============================================================================ #
@@ -109,10 +110,7 @@ def create_contract_service(body, created_by, document=None):
     contract_value = body.get("contract_value")
 
     if contract_value is not None:
-        try:
-            contract_value = float(contract_value)
-        except (TypeError, ValueError):
-            raise ValidationError("Nilai kontrak harus berupa angka")
+        contract_value = validate_rupiah(contract_value, "Nilai kontrak")
 
         if contract_value < 0:
             raise ValidationError("Nilai kontrak tidak boleh kurang dari 0")
@@ -236,10 +234,7 @@ def update_contract_service(id_contract, body, updated_by, document=None):
     contract_value = body.get("contract_value")
 
     if contract_value is not None:
-        try:
-            contract_value = float(contract_value)
-        except (TypeError, ValueError):
-            raise ValidationError("Nilai kontrak harus berupa angka")
+        contract_value = validate_rupiah(contract_value, "Nilai kontrak")
 
         if contract_value < 0:
             raise ValidationError("Nilai kontrak tidak boleh kurang dari 0")
@@ -279,6 +274,24 @@ def update_contract_service(id_contract, body, updated_by, document=None):
             document,
             "kontrak"
         )
+
+    # ----------------- Kunci nilai kontrak yang sudah ditagih (invoice) ---------------- #
+
+    invoiced = get_billing_summary_by_work_item(contract["id_work_item"]) if contract.get("id_work_item") else None
+
+    if invoiced and invoiced["invoice_count"] > 0:
+
+        if id_work_item != contract["id_work_item"]:
+            raise ValidationError("Work Item kontrak tidak dapat diubah karena sudah memiliki invoice")
+
+        if float(vat_rate or 0) != float(contract["vat_rate"] or 0):
+            raise ValidationError("PPN kontrak tidak dapat diubah karena sudah memiliki invoice")
+
+        if contract_value is None or contract_value < invoiced["invoiced_value"]:
+            raise ValidationError(
+                f"Nilai kontrak tidak boleh lebih kecil dari total yang sudah diinvoice "
+                f"(DPP {invoiced['invoiced_value']:,.0f})"
+            )
 
     # ------------------------------ Update Contract ----------------------------- #
 

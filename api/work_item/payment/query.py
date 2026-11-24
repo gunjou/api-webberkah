@@ -1,4 +1,5 @@
 from sqlalchemy import text
+from api.work_item.helper import total_with_vat_sql
 
 from api.shared.exceptions import NotFoundError, ValidationError
 from api.utils.config import engine
@@ -15,17 +16,12 @@ def create_payment(id_invoice, payment_date, amount, document_url, notes, create
 
         # ========================== LOCK INVOICE ========================== #
 
-        invoice_query = text("""
+        invoice_query = text(f"""
             SELECT
                 wi2.id_invoice,
                 wi2.id_work_item,
                 wi.current_stage,
-                ROUND(wi2.invoice_value
-                    + (
-                        wi2.invoice_value
-                        * COALESCE(wi2.vat_rate, 0)
-                        / 100
-                    ), 0) AS total_invoice
+                {total_with_vat_sql("wi2.invoice_value", "wi2.vat_rate")} AS total_invoice
             FROM work_invoices wi2
             INNER JOIN work_items wi
                 ON wi.id_work_item = wi2.id_work_item
@@ -301,17 +297,21 @@ def delete_payment(id_payment, updated_by):
 
         # ======================== CHECK ACTIVE PAYMENT ========================= #
 
+        # Hitung per Work Item (semua invoice termin), bukan per invoice
         remaining_payment_query = text("""
             SELECT COUNT(*)
-            FROM work_payments
-            WHERE id_invoice = :id_invoice
-              AND is_active = 1
+            FROM work_payments wp
+            INNER JOIN work_invoices inv
+                ON inv.id_invoice = wp.id_invoice
+               AND inv.is_active = 1
+            WHERE inv.id_work_item = :id_work_item
+              AND wp.is_active = 1
         """)
 
         remaining_payment = conn.execute(
             remaining_payment_query,
             {
-                "id_invoice": payment["id_invoice"]
+                "id_work_item": payment["id_work_item"]
             }
         ).scalar()
 

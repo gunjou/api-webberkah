@@ -1,6 +1,6 @@
 
 from api.shared.exceptions import ValidationError, NotFoundError
-from api.work_item.helper import upload_work_item_document
+from api.work_item.helper import upload_work_item_document, validate_rupiah
 from .query import *
 
 
@@ -41,7 +41,6 @@ def get_invoice_list_service(filters):
 
 def create_invoice_service(body, created_by, document=None):
 
-    id_work_item = body.get("id_work_item")
     id_completion = body.get("id_completion")
     invoice_number = body.get("invoice_number")
     invoice_date = body.get("invoice_date")
@@ -51,9 +50,6 @@ def create_invoice_service(body, created_by, document=None):
     notes = body.get("notes")
 
     # ------------------------------ Validate Input ------------------------------ #
-
-    if not id_work_item:
-        raise ValidationError("Work Item wajib dipilih")
 
     if not id_completion:
         raise ValidationError("BA wajib dipilih")
@@ -69,8 +65,10 @@ def create_invoice_service(body, created_by, document=None):
     if invoice_value is None:
         raise ValidationError("Nilai invoice wajib diisi")
 
-    if invoice_value < 0:
-        raise ValidationError("Nilai invoice tidak boleh kurang dari 0")
+    invoice_value = validate_rupiah(invoice_value, "Nilai invoice")
+
+    if invoice_value <= 0:
+        raise ValidationError("Nilai invoice harus lebih besar dari 0")
 
     if vat_rate is not None and not 0 <= vat_rate <= 100:
         raise ValidationError("PPN harus berada di antara 0 sampai 100")
@@ -81,7 +79,14 @@ def create_invoice_service(body, created_by, document=None):
             "dari tanggal invoice"
         )
 
-    # ------------------------------ Check Work Item ----------------------------- #
+    # ---------------------- Completion / BA → Work Item ------------------------- #
+
+    completion = get_completion_by_id(id_completion)
+
+    if not completion:
+        raise NotFoundError("BA tidak ditemukan")
+
+    id_work_item = completion["id_work_item"]
 
     work_item = get_work_item_by_id(id_work_item)
 
@@ -90,21 +95,9 @@ def create_invoice_service(body, created_by, document=None):
 
     # ------------------------------ Validate Stage ------------------------------ #
 
-    if work_item.get("current_stage") != "BA":
+    if work_item.get("current_stage") not in ("BA", "INVOICE", "PAYMENT"):
         raise ValidationError(
-            "Invoice hanya dapat dibuat ketika Work Item berada pada tahap BA"
-        )
-
-    # -------------------------- Validate Completion / BA ------------------------- #
-
-    completion = get_completion_by_id(id_completion)
-
-    if not completion:
-        raise NotFoundError("BA tidak ditemukan")
-
-    if completion["id_work_item"] != id_work_item:
-        raise ValidationError(
-            "BA tidak terkait dengan Work Item yang dipilih"
+            "Invoice hanya dapat dibuat ketika Work Item berada pada tahap BA, INVOICE, atau PAYMENT"
         )
 
     # ----------------------- Check Duplicate Invoice Number ---------------------- #
@@ -165,8 +158,9 @@ def update_invoice_service(id_invoice, body, updated_by, document=None):
     if not invoice:
         raise NotFoundError("Invoice tidak ditemukan")
 
-    id_work_item = body.get("id_work_item")
-    id_completion = body.get("id_completion")
+    # Work Item mengikuti invoice yang tersimpan, tidak bisa dipindah
+    id_work_item = invoice["id_work_item"]
+    id_completion = body.get("id_completion") or invoice["id_completion"]
     invoice_number = body.get("invoice_number")
     invoice_date = body.get("invoice_date")
     invoice_value = body.get("invoice_value")
@@ -175,9 +169,6 @@ def update_invoice_service(id_invoice, body, updated_by, document=None):
     notes = body.get("notes")
 
     # ------------------------------ Validasi Input ------------------------------ #
-
-    if not id_work_item:
-        raise ValidationError("Work Item wajib dipilih")
 
     if not invoice_number or not invoice_number.strip():
         raise ValidationError("Nomor invoice wajib diisi")
@@ -188,8 +179,10 @@ def update_invoice_service(id_invoice, body, updated_by, document=None):
     if invoice_value is None:
         raise ValidationError("Nilai invoice wajib diisi")
 
-    if invoice_value < 0:
-        raise ValidationError("Nilai invoice tidak boleh kurang dari 0")
+    invoice_value = validate_rupiah(invoice_value, "Nilai invoice")
+
+    if invoice_value <= 0:
+        raise ValidationError("Nilai invoice harus lebih besar dari 0")
 
     if vat_rate is not None and not 0 <= vat_rate <= 100:
         raise ValidationError("PPN harus berada di antara 0 sampai 100")
@@ -275,11 +268,10 @@ def delete_invoice_service(id_invoice, updated_by):
     if not work_item:
         raise NotFoundError("Work Item tidak ditemukan")
 
-    # Invoice hanya boleh dihapus ketika
-    # Work Item masih berada pada stage INVOICE
-    if work_item.get("current_stage") != "INVOICE":
+    # Invoice yang sudah punya pembayaran tidak boleh dihapus (hapus pembayarannya dulu)
+    if count_active_payment(id_invoice) > 0:
         raise ValidationError(
-            "Invoice hanya dapat dihapus ketika Work Item berada pada tahap INVOICE"
+            "Invoice yang sudah memiliki pembayaran tidak dapat dihapus"
         )
 
     return delete_invoice(
@@ -287,3 +279,24 @@ def delete_invoice_service(id_invoice, updated_by):
         id_work_item=id_work_item,
         updated_by=updated_by
     )
+
+def get_billing_summary_service(id_completion, exclude_id=None):
+
+    if not id_completion:
+        raise ValidationError("BA wajib dipilih")
+
+    completion = get_completion_by_id(id_completion)
+
+    if not completion:
+        raise NotFoundError("BA tidak ditemukan")
+
+    summary = get_billing_summary_by_work_item(completion["id_work_item"], exclude_id)
+
+    return {
+        "id_completion": id_completion,
+        "id_work_item": completion["id_work_item"],
+        **summary,
+        # Sugesti untuk form; backend tetap memvalidasi ulang saat simpan
+        "suggested_invoice_value": summary["remaining_value"],
+        "suggested_vat_rate": summary["vat_rate"],
+    }

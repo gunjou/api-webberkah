@@ -644,13 +644,9 @@ def get_completion_options(context=None):
 
     if context == "invoice":
 
+        # Penagihan bertahap: BA tetap bisa dipilih selama pekerjaan belum ditutup
         query += """
-            AND NOT EXISTS (
-                SELECT 1
-                FROM work_invoices inv
-                WHERE inv.id_completion = wc.id_completion
-                  AND inv.is_active = 1
-            )
+            AND wi.current_stage IN ('BA', 'INVOICE', 'PAYMENT')
         """
 
     query += """

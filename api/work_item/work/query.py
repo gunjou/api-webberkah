@@ -1,4 +1,5 @@
 from sqlalchemy import text
+from api.work_item.helper import total_with_vat_sql
 
 from api.shared.exceptions import NotFoundError, ValidationError
 from api.utils.config import engine
@@ -832,15 +833,11 @@ def close_work_item(id_work_item, updated_by):
         if work["current_stage"] != "PAYMENT":
             raise ValidationError("Work item hanya dapat ditutup ketika berada pada stage PAYMENT")
 
-        # =========================== 3. GET ACTIVE INVOICE ========================== #
-        invoice_query = text("""
+        # ======================= 3. INVOICE TERAKHIR & TOTAL ======================= #
+
+        invoice = conn.execute(text("""
             SELECT
-                wi2.id_invoice, wi2.invoice_number, wi2.invoice_value, wi2.vat_rate,
-                ROUND(wi2.invoice_value +
-                    (
-                        wi2.invoice_value *
-                        COALESCE(wi2.vat_rate, 0) / 100
-                    ), 0) AS total_invoice
+                wi2.id_invoice, wi2.invoice_number
             FROM work_invoices wi2
             WHERE wi2.id_work_item = :id_work_item
               AND wi2.is_active = 1
@@ -848,48 +845,64 @@ def close_work_item(id_work_item, updated_by):
                 wi2.invoice_date DESC NULLS LAST,
                 wi2.id_invoice DESC
             LIMIT 1
-            FOR UPDATE
-        """)
-
-        invoice = conn.execute(
-            invoice_query,
-            {
-                "id_work_item": id_work_item
-            }
-        ).mappings().first()
+        """), {"id_work_item": id_work_item}).mappings().first()
 
         if not invoice:
             raise ValidationError("Work item belum memiliki invoice aktif")
 
-        # ======================== 4. CALCULATE ACTIVE PAYMENT ======================= #
-        payment_query = text("""
+        # ============== 4. STANDAR LUNAS: KONTRAK TERTAGIH PENUH + SEMUA INVOICE DIBAYAR ============== #
+
+        contract = conn.execute(text("""
+            SELECT contract_value
+            FROM work_contracts
+            WHERE id_work_item = :id_work_item
+              AND is_active = 1
+            ORDER BY contract_date DESC NULLS LAST, id_contract DESC
+            LIMIT 1
+        """), {"id_work_item": id_work_item}).mappings().first()
+
+        if not contract or contract["contract_value"] is None:
+            raise ValidationError("Work item belum memiliki kontrak aktif")
+
+        # Per invoice: total (+PPN, dibulatkan sekali per invoice) vs pembayaran invoice tsb
+        billing = conn.execute(text(f"""
             SELECT
-                COALESCE(SUM(wp.amount), 0) AS paid_amount
-            FROM work_payments wp
-            WHERE wp.id_invoice = :id_invoice
-              AND wp.is_active = 1
-        """)
+                COALESCE(SUM(inv.invoice_value), 0) AS invoiced_value,
+                COALESCE(SUM(inv.total_invoice), 0) AS total_invoice,
+                COALESCE(SUM(inv.paid), 0) AS paid_amount,
+                COALESCE(SUM(GREATEST(inv.total_invoice - inv.paid, 0)), 0) AS outstanding_amount
+            FROM (
+                SELECT
+                    i.invoice_value,
+                    {total_with_vat_sql("i.invoice_value", "i.vat_rate")} AS total_invoice,
+                    COALESCE((
+                        SELECT SUM(wp.amount) FROM work_payments wp
+                        WHERE wp.id_invoice = i.id_invoice AND wp.is_active = 1
+                    ), 0) AS paid
+                FROM work_invoices i
+                WHERE i.id_work_item = :id_work_item
+                  AND i.is_active = 1
+            ) inv
+        """), {"id_work_item": id_work_item}).mappings().first()
 
-        payment = conn.execute(
-            payment_query,
-            {
-                "id_invoice": invoice["id_invoice"]
-            }
-        ).mappings().first()
-
-        paid_amount = payment["paid_amount"] or 0
-        total_invoice = invoice["total_invoice"]
-
-        outstanding_amount = max(
-            total_invoice - paid_amount,
-            0
-        )
+        total_contract = contract["contract_value"]
+        total_invoice = billing["total_invoice"]
+        paid_amount = billing["paid_amount"]
+        outstanding_amount = billing["outstanding_amount"]
+        uninvoiced_value = total_contract - billing["invoiced_value"]
 
         # ============================ 5. VALIDATE PAYMENT =========================== #
+
+        if uninvoiced_value > 0:
+            raise ValidationError(
+                f"Nilai kontrak belum seluruhnya ditagih. "
+                f"Sisa yang belum diinvoice (DPP) {uninvoiced_value:,.0f}"
+            )
+
         if outstanding_amount > 0:
             raise ValidationError(
                 f"Pembayaran belum lunas. "
-                f"Outstanding sebesar {outstanding_amount:,.2f}"
+                f"Outstanding sebesar {outstanding_amount:,.0f}"
             )
 
         # ======================= 6. UPDATE WORK ITEM → CLOSED ======================= #
@@ -940,6 +953,7 @@ def close_work_item(id_work_item, updated_by):
             "work_name": work["work_name"],
             "id_invoice": invoice["id_invoice"],
             "invoice_number": invoice["invoice_number"],
+            "contract_value": total_contract,
             "total_invoice": total_invoice,
             "paid_amount": paid_amount,
             "outstanding_amount": outstanding_amount,

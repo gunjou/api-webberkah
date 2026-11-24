@@ -1,11 +1,89 @@
 from sqlalchemy import text
 
-from api.shared.exceptions import NotFoundError
+from api.shared.exceptions import NotFoundError, ValidationError
 from api.utils.config import engine
 from api.shared.helper import get_wita
+from api.work_item.helper import total_with_vat_sql
 
 
 # ========================= #ANCHOR - HELPER FUNCTION ========================= #
+
+def get_billing_summary(conn, id_work_item, exclude_id=None):
+    """Satu-satunya sumber hitungan kontrak vs invoice (dipakai sugesti & validasi).
+    Batas tagihan dihitung dari DPP (rupiah bulat) sehingga tidak ada selisih pembulatan PPN."""
+
+    row = conn.execute(text(f"""
+        SELECT
+            ct.contract_value,
+            ct.vat_rate,
+            {total_with_vat_sql("ct.contract_value", "ct.vat_rate")} AS contract_total,
+            COALESCE(inv.invoiced_value, 0) AS invoiced_value,
+            COALESCE(inv.invoiced_total, 0) AS invoiced_total,
+            COALESCE(inv.invoice_count, 0) AS invoice_count
+        FROM (
+            SELECT contract_value, vat_rate
+            FROM work_contracts
+            WHERE id_work_item = :id
+              AND is_active = 1
+            ORDER BY contract_date DESC NULLS LAST, id_contract DESC
+            LIMIT 1
+        ) ct
+        LEFT JOIN (
+            SELECT
+                SUM(invoice_value) AS invoiced_value,
+                SUM({total_with_vat_sql("invoice_value", "vat_rate")}) AS invoiced_total,
+                COUNT(*) AS invoice_count
+            FROM work_invoices
+            WHERE id_work_item = :id
+              AND is_active = 1
+              AND (CAST(:exclude_id AS INTEGER) IS NULL OR id_invoice <> :exclude_id)
+        ) inv ON TRUE
+    """), {"id": id_work_item, "exclude_id": exclude_id}).mappings().first()
+
+    if not row:
+        raise ValidationError("Work Item belum memiliki kontrak aktif")
+
+    if row["contract_value"] is None:
+        raise ValidationError("Nilai kontrak belum diisi")
+
+    data = dict(row)
+    data["remaining_value"] = max(data["contract_value"] - data["invoiced_value"], 0)
+
+    # Sisa total = total kontrak - total yang sudah ditagih; termin terakhir otomatis menutup selisih pembulatan
+    data["remaining_total"] = max(data["contract_total"] - data["invoiced_total"], 0)
+
+    return data
+
+
+def get_billing_summary_by_work_item(id_work_item, exclude_id=None):
+
+    with engine.connect() as conn:
+
+        return get_billing_summary(conn, id_work_item, exclude_id)
+
+
+def validate_contract_limit(conn, id_work_item, invoice_value, vat_rate, exclude_id=None):
+    """DPP semua invoice aktif tidak boleh melebihi DPP kontrak, dan PPN wajib sama dengan kontrak.
+    Dipanggil di dalam transaksi; work item di-lock agar create paralel tidak lolos bersamaan."""
+
+    conn.execute(
+        text("SELECT 1 FROM work_items WHERE id_work_item = :id FOR UPDATE"),
+        {"id": id_work_item}
+    )
+
+    summary = get_billing_summary(conn, id_work_item, exclude_id)
+
+    if float(vat_rate or 0) != float(summary["vat_rate"] or 0):
+        raise ValidationError(
+            f"PPN invoice harus sama dengan PPN kontrak ({float(summary['vat_rate'] or 0):g}%)"
+        )
+
+    if invoice_value > summary["remaining_value"]:
+        raise ValidationError(
+            f"Nilai invoice melebihi sisa nilai kontrak. "
+            f"Sisa yang dapat ditagih (DPP) {summary['remaining_value']:,.0f}"
+        )
+
 
 def get_work_item_by_id(id_work_item):
 
@@ -588,6 +666,8 @@ def create_invoice(id_work_item, id_completion, invoice_number, invoice_date, in
 
     with engine.begin() as conn:
 
+        validate_contract_limit(conn, id_work_item, invoice_value, vat_rate)
+
         # ----------------------------- 1. INSERT INVOICE ---------------------------- #
 
         insert_invoice_query = text("""
@@ -623,6 +703,15 @@ def create_invoice(id_work_item, id_completion, invoice_number, invoice_date, in
         ).mappings().first()
 
         invoice = dict(result)
+
+        # Invoice termin berikutnya: stage sudah INVOICE/PAYMENT, tidak ada perpindahan stage
+        current_stage = conn.execute(
+            text("SELECT current_stage FROM work_items WHERE id_work_item = :id"),
+            {"id": id_work_item}
+        ).scalar()
+
+        if current_stage != "BA":
+            return invoice
 
         # ------------------------- 2. CLOSE BA STAGE HISTORY ------------------------ #
 
@@ -1051,6 +1140,8 @@ def update_invoice(id_invoice, id_work_item, id_completion, invoice_number, invo
 
     with engine.begin() as conn:
 
+        validate_contract_limit(conn, id_work_item, invoice_value, vat_rate, exclude_id=id_invoice)
+
         result = conn.execute(
             query,
             {
@@ -1104,6 +1195,24 @@ def delete_invoice(id_invoice, id_work_item, updated_by):
             raise NotFoundError(
                 "Invoice tidak ditemukan atau sudah tidak aktif"
             )
+
+        # Masih ada invoice termin lain: stage tidak berubah
+        remaining_invoice = conn.execute(text("""
+            SELECT COUNT(*) FROM work_invoices
+            WHERE id_work_item = :id_work_item AND is_active = 1
+        """), {"id_work_item": id_work_item}).scalar()
+
+        if remaining_invoice > 0:
+            current_stage = conn.execute(
+                text("SELECT current_stage FROM work_items WHERE id_work_item = :id"),
+                {"id": id_work_item}
+            ).scalar()
+
+            return {
+                "id_invoice": id_invoice,
+                "id_work_item": id_work_item,
+                "current_stage": current_stage
+            }
 
         # ====================== 2. CLOSE INVOICE STAGE HISTORY ====================== #
 
@@ -1175,3 +1284,13 @@ def delete_invoice(id_invoice, id_work_item, updated_by):
         "id_work_item": id_work_item,
         "current_stage": "BA"
     }
+
+
+def count_active_payment(id_invoice):
+
+    with engine.connect() as conn:
+
+        return conn.execute(text("""
+            SELECT COUNT(*) FROM work_payments
+            WHERE id_invoice = :id_invoice AND is_active = 1
+        """), {"id_invoice": id_invoice}).scalar()

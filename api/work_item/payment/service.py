@@ -1,5 +1,5 @@
 from api.shared.exceptions import ValidationError, NotFoundError
-from api.work_item.helper import upload_work_item_document
+from api.work_item.helper import upload_work_item_document, validate_rupiah
 
 from .query import *
 
@@ -18,6 +18,8 @@ def create_payment_service(payload, created_by, document=None):
 
     if amount is None:
         raise ValidationError("Nominal pembayaran wajib diisi")
+
+    amount = validate_rupiah(amount, "Nominal pembayaran")
 
     if amount <= 0:
         raise ValidationError("Nominal pembayaran harus lebih besar dari 0")
